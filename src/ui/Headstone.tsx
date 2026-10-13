@@ -44,7 +44,7 @@ interface GraveyardProps {
 export function Graveyard({ graves, config, inspectedId, onInspect }: GraveyardProps) {
   return (
     <div className="border-t-2 border-lead px-5 py-4">
-      <h3 className="font-caps text-sm tracking-wide text-ash">Graveyard</h3>
+      <h3 className="font-caps text-base tracking-wide text-ash">Graveyard</h3>
       <ul className="mt-3 grid grid-cols-2 gap-3">
         {[...graves].reverse().map((c) => {
           const e = epitaph(c, config);

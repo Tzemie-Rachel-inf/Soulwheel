@@ -273,12 +273,25 @@ describe('the crossroads', () => {
     expect(earnedTitle(GAME_CONFIG, humble, [{ stepId: 'fight_tournament', optionId: 'glory', probability: 0.1 }])).toBe('Champion of the Realm');
   });
 
-  it('brings a hero who comes home straight home, with the fame they earned', () => {
+  it('meets the road home when an adventure would end after a spin or two, and only once', () => {
     const { w, hero: h } = hero(16);
     const state: AdventureState = { ...startAdventure(GAME_CONFIG, h), currentStepId: 'study' };
     const after = spinAdventure(state, GAME_CONFIG, w, createSeededRng(5)).state;
+    expect(after.currentStepId).toBe('road_home');
+    const tale = { ...GAME_CONFIG, steps: { ...GAME_CONFIG.steps, road_home: { ...getStep(GAME_CONFIG, 'road_home'), options: getStep(GAME_CONFIG, 'road_home').options.filter((o) => o.id === 'tavern_tale') } } };
+    const home = spinAdventure(after, tale, w, createSeededRng(5)).state;
+    expect(home.currentStepId).toBeNull();
+  });
+
+  it('brings a hero home with the fame they earned, and never with none', () => {
+    const { w, hero: h } = hero(16);
+    const long = [1, 2, 3].map((n) => ({ stepId: `earlier_${n}`, optionId: 'x', probability: 1 }));
+    const quiet = { ...GAME_CONFIG, steps: { ...GAME_CONFIG.steps, study: { ...getStep(GAME_CONFIG, 'study'), options: [{ id: 'quiet', label: 'Quiet', baseWeight: 1, fame: 0, nextStepId: null }] } } };
+    const state: AdventureState = { ...startAdventure(quiet, h), currentStepId: 'study', rolls: long };
+    const after = spinAdventure(state, quiet, w, createSeededRng(5)).state;
     expect(after.currentStepId).toBeNull();
-    expect(after.fameEarned).toBe(after.rolls.at(-1)?.fame ?? 0);
+    expect(after.fameEarned).toBe(quiet.fame.floor);
+    expect(after.rolls.at(-1)?.fame).toBe(quiet.fame.floor);
     expect(after.character.fame).toBe(h.fame + after.fameEarned);
   });
 });
@@ -391,5 +404,33 @@ describe('spells: bonus, mastery, names', () => {
     expect(name('might', 27, human)).toBe('Titanic');
     expect(name('might', 50, human)).toBe('Worldbreaker');
     expect(name('might', 0, human)).toBe('Powerless');
+  });
+});
+
+describe('powers keep their promise', () => {
+  it('teaches a power on every spin of a power wheel, until every power there is known', () => {
+    const char: Character = { ...soul(), status: 'alive' };
+    expect(chance('corrupted_powers', 'surge', char)).toBe(0);
+    const step = getStep(GAME_CONFIG, 'corrupted_powers');
+    const allKnown = step.options.filter((o) => o.id !== 'surge').reduce<Character>((c, o) => take(c, step.id, o.id), char);
+    expect(chance('corrupted_powers', 'surge', allKnown)).toBe(1);
+  });
+
+  it('leaves a debt when the Abyss answers, which Unfinished Business collects', () => {
+    const taught = take({ ...soul(), status: 'alive' }, 'power_school', 'corrupted');
+    expect(taught.tags).toContain('hook:abyss_debt');
+    expect(GAME_CONFIG.hooks?.['hook:abyss_debt']).toBeDefined();
+    expect(chance('crossroads', 'unfinished_business', taught)).toBeGreaterThan(0);
+    const w = world();
+    expect(resolveNextStep(getStep(GAME_CONFIG, 'crossroads').options.find((o) => o.id === 'unfinished_business')!.nextStepId, w, taught)).toBe('abyss_collects');
+    expect(take(taught, 'abyss_collects', 'paid_in_luck').tags).not.toContain('hook:abyss_debt');
+  });
+});
+
+describe('who they are tilts the crossroads', () => {
+  it('bends the crossroads by personality, as it does by archetype', () => {
+    const base: Character = { ...soul(), status: 'alive', personality: null, archetype: null };
+    expect(chance('crossroads', 'make_ally', { ...base, personality: 'kind' })).toBeGreaterThan(chance('crossroads', 'make_ally', base));
+    expect(chance('crossroads', 'make_ally', { ...base, personality: 'cruel' })).toBeLessThan(chance('crossroads', 'make_ally', base));
   });
 });

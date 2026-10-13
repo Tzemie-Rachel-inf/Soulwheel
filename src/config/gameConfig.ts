@@ -186,7 +186,7 @@ const FATE: WheelStep = {
       id: 'normal_fate',
       label: 'Normal Fate',
       description: 'An ordinary birth: no luck either way. Your story is yours to write.',
-      baseWeight: 50,
+      baseWeight: 30, // was 50: the stars have their say more often than not
       rarity: 'common',
       nextStepId: AFTER_FATE,
       color: '#64748b',
@@ -196,7 +196,7 @@ const FATE: WheelStep = {
       id: 'blessed',
       label: 'Blessed by the Gods',
       description: 'Born under a favourable sky. Every wheel leans your way.',
-      baseWeight: 14,
+      baseWeight: 16,
       rarity: 'uncommon',
       threatScaling: -0.1, // the gods withdraw as the world darkens
       luckDelta: 1,
@@ -211,7 +211,7 @@ const FATE: WheelStep = {
       id: 'cursed',
       label: 'Cursed Birth',
       description: 'Strength, bought with something you never agreed to sell. Luck went with it.',
-      baseWeight: 14,
+      baseWeight: 16,
       rarity: 'uncommon',
       threatScaling: 0.25,
       statBonus: { might: 4, arcana: 2, vitality: -3 },
@@ -227,7 +227,7 @@ const FATE: WheelStep = {
       id: 'demon_lord',
       label: 'Demon Lord',
       description: 'You are the darkness the heroes are born to fight.',
-      baseWeight: 6,
+      baseWeight: 5, // keeps its old share (about 7%) of a wheel with fewer ordinary births
       rarity: 'legendary',
       threatScaling: 0.2,
       // A one-of-a-kind role. No `condition` needed: the engine locks this slice
@@ -355,7 +355,7 @@ const TALENTS: WheelStep = {
       id: 'ordinary',
       label: 'Ordinary Soul',
       description: 'No gift worth a name. Plenty of legends started here.',
-      baseWeight: 130, // with ordinary luck, more than half of all souls
+      baseWeight: 40, // with ordinary luck and no special gifts unlocked, about a third of all souls
       rarity: 'common',
       luckScaling: -0.5, // the lucky are less often ordinary
       nextStepId: 'armory',
@@ -509,8 +509,8 @@ const ARMORY: WheelStep = {
     {
       id: 'empty_hands',
       label: 'Empty Hands',
-      description: 'Nothing but fists and nerve. The road has weapons, for those who survive it.',
-      baseWeight: 28,
+      description: 'Nothing but fists and nerve. The road has weapons, and Find a Weapon comes up twice as often for the unarmed.',
+      baseWeight: 18,
       rarity: 'common',
       luckScaling: -0.6,
       statModifiers: { agility: 2 },
@@ -519,7 +519,7 @@ const ARMORY: WheelStep = {
       icon: 'Hand',
     },
     // Seventeen weapons share the rest. Their weights add up to what the eight before them
-    // did (68.5 with the Heirloom unlocked), so Empty Hands keeps its old chance.
+    // did (68.5 with the Heirloom unlocked); Empty Hands is about one soul in five.
     weapon({ id: 'rusted_shortsword', label: 'Rusted Shortsword', description: 'It has seen better centuries.', baseWeight: 9, rarity: 'common', weaponTierDelta: 1, color: '#a16207', icon: 'Slice' }),
     weapon({ id: 'hunting_spear', label: 'Hunting Spear', description: 'Reach, balance, and a sharp point.', baseWeight: 7.5, rarity: 'common', weaponTierDelta: 1, statModifiers: { might: 1 }, color: '#8a6a3a', icon: 'Crosshair' }),
     weapon({ id: 'iron_mace', label: 'Iron Mace', description: 'Crude, heavy, honest.', baseWeight: 7, rarity: 'common', weaponTierDelta: 1, statModifiers: { vitality: 1 }, color: '#6e7280', icon: 'Gavel' }),
@@ -1593,6 +1593,7 @@ export const GAME_CONFIG: GameConfig = {
   adventure: {
     entryStepId: 'crossroads',
     castWheel: CAST_WHEEL,
+    roadHome: { stepId: 'road_home', minSpins: 3 },
   },
   worldEvents: WORLD_EVENTS,
   meters: METERS,

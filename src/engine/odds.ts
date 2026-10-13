@@ -5,6 +5,7 @@
  *   vary    the option's own per-character twist (`WheelOption.vary`), first of all
  *   race    × the race's odds for this option (`Race.odds`, the family's table underneath)
  *   archetype × the archetype's odds for this option (`Archetype.odds`)
+ *   personality × the personality's odds for this option (`Personality.odds`)
  *   luck    baseWeight × max(0, 1 + luckScaling × char.luck)
  *   stats   × max(0, 1 + Σ statScaling[stat] × (char.stats[stat] − 10)): the best outcomes favour the sharp, the strong...
  *   fame    × max(0, 1 + fameScaling × the character's fame tier): the famous take riskier roads
@@ -73,6 +74,13 @@ export function archetypeFactor(stepId: string, optionId: string, char: Characte
   return Number.isFinite(factor) ? Math.max(0, factor) : 0;
 }
 
+/** How the character's personality bends one option: its `odds` entry, else 1. Never negative. */
+export function personalityFactor(stepId: string, optionId: string, char: Character, config: GameConfig): number {
+  const personality = char.personality === null ? undefined : config.personalities[char.personality];
+  const factor = personality?.odds?.[stepId]?.[optionId] ?? 1;
+  return Number.isFinite(factor) ? Math.max(0, factor) : 0;
+}
+
 /**
  * A wheel's options as `char` is dealt them. Pure: the config's options are never
  * mutated; options with nothing to adjust are returned as they are. Trait outcomes the
@@ -86,6 +94,7 @@ export function dealOptions(step: WheelStep, char: Character, config: GameConfig
     const scale =
       raceFactor(step.id, option.id, char, config) *
       archetypeFactor(step.id, option.id, char, config) *
+      personalityFactor(step.id, option.id, char, config) *
       luckFactor(option, char) *
       statFactor(option, char) *
       fameFactor(option, char, config) *

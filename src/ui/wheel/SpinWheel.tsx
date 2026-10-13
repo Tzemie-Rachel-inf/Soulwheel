@@ -450,6 +450,7 @@ export function SpinWheel({
 
           <button
             type="button"
+            data-spin-button
             onClick={onSpinRequest}
             disabled={!canSpin || spinning}
             className="font-display absolute z-10 flex items-center justify-center rounded-full border-[3px] border-lead text-candle transition-[filter,color] duration-200 enabled:hover:brightness-125 disabled:cursor-not-allowed disabled:text-candle/35"
@@ -459,9 +460,9 @@ export function SpinWheel({
               left: R - hubSize / 2,
               top: R - hubSize / 2,
               fontSize: Math.max(18, R * 0.115),
-              background: 'radial-gradient(circle at 40% 32%, #c23446, #8f1c2c 58%, #4f0d17)',
+              background: 'radial-gradient(circle at 40% 32%, #c23446, var(--color-gules) 58%, #4f0d17)',
               boxShadow:
-                '0 0 0 3px #8a6420, 0 0 0 5px #f0cd6c, 0 0 0 6px #5c4320, 0 6px 16px rgba(0, 0, 0, 0.6), inset 0 0 0 2px rgba(240, 205, 108, 0.6), inset 0 -8px 14px rgba(0, 0, 0, 0.4)',
+                '0 0 0 3px var(--color-gilt-deep), 0 0 0 5px var(--color-gilt-bright), 0 0 0 6px var(--color-lead), 0 6px 16px rgba(0, 0, 0, 0.6), inset 0 0 0 2px rgba(240, 205, 108, 0.6), inset 0 -8px 14px rgba(0, 0, 0, 0.4)',
               textShadow: '0 2px 0 rgba(0, 0, 0, 0.6)',
             }}
           >
@@ -528,7 +529,7 @@ export function SpinWheel({
               strokeWidth="3"
               strokeLinejoin="round"
             />
-            <circle cx="20" cy="15" r="4.5" fill="#8f1c2c" stroke="#3a2508" strokeWidth="1.5" />
+            <circle cx="20" cy="15" r="4.5" fill="var(--color-gules)" stroke="#3a2508" strokeWidth="1.5" />
           </svg>
 
           {hover && hovered && hoveredArc && (

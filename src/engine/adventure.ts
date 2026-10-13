@@ -24,6 +24,9 @@
  * Titles: an adventure roll with an `epithet` that outranks every title the hero has earned
  * becomes their title on the spot ("Champion of the Realm").
  *
+ * The road home (`AdventureConfig.roadHome`): an adventure that would end after a spin or two
+ * meets one more wheel on the way back, once.
+ *
  * Meters (`GameConfig.meters`): pressure that builds across a life. Options move them; some rise
  * on their own each adventure (a vampire's hunger). When the road would end with a meter full,
  * its trigger wheel comes up instead (the wounds fester, the hunger takes over), and it empties.
@@ -330,6 +333,19 @@ function resolveRoll(
     next = filled.trigger;
     character = { ...character, meters: { ...character.meters, [filled.id]: 0 } };
   }
+  // Too short to be an adventure: the way home has something on it first.
+  const home = config.adventure.roadHome;
+  if (home && next === null && !filled && canAdventure(character) && !rolls.some((r) => r.stepId === home.stepId)) {
+    const spun = rolls.filter((r) => !isWhoStep(r.stepId)).length;
+    if (spun < home.minSpins) next = home.stepId;
+  }
+  // Home again with nothing to show for it: the floor tops the road's fame up, on its last roll.
+  const total = state.fameEarned + fame;
+  const topUp = next === null && canAdventure(character) && total >= 0 ? Math.max(0, (config.fame.floor ?? 0) - total) : 0;
+  if (topUp > 0) {
+    character = { ...character, fame: (character.fame ?? 0) + topUp };
+    rolls[rolls.length - 1] = { ...rolls.at(-1)!, fame: fame + topUp };
+  }
   const arrival = arrive(config, next, world, character, rng);
   if (arrival.expedition) character = { ...character, expedition: arrival.expedition };
   const effects = cast ? [option.castEffect, spoils?.effect].filter((e): e is CastEffect => e !== undefined) : [];
@@ -344,7 +360,7 @@ function resolveRoll(
       currentStepId: arrival.stepId,
       stepsTaken: state.stepsTaken + 1,
       rolls,
-      fameEarned: state.fameEarned + fame,
+      fameEarned: state.fameEarned + fame + topUp,
       fate,
       worldThreat: state.worldThreat + (option.story?.worldThreat ?? 0),
       cast: arrival.cast,

@@ -1,0 +1,3 @@
+W Wheel "blessed_powers" has no always-available option; some worlds could make it unspinnable.
+W Wheel "corrupted_powers" has no always-available option; some worlds could make it unspinnable.
+W Wheel "arcane_powers" has no always-available option; some worlds could make it unspinnable.

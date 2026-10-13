@@ -74,8 +74,10 @@ export function buildCatalog(config: GameConfig): WheelCatalog {
     if (!seen.has(id) && !trainOf.has(id)) add(id, 'adventure', config.steps[id]!);
   }
   // A meter's trigger wheel is reached by the meter filling, not by an option: adventures too.
-  for (const meter of config.meters ?? []) {
-    for (const id of walk(config, meter.trigger)) if (!seen.has(id) && !trainOf.has(id)) add(id, 'adventure', config.steps[id]!);
+  // So is the road home, by a short adventure.
+  const roots = [...(config.meters ?? []).map((m) => m.trigger), ...(config.adventure.roadHome ? [config.adventure.roadHome.stepId] : [])];
+  for (const root of roots) {
+    for (const id of walk(config, root)) if (!seen.has(id) && !trainOf.has(id)) add(id, 'adventure', config.steps[id]!);
   }
   for (const id of trainOf.keys()) if (!seen.has(id)) add(id, 'training', config.steps[id]!);
   for (const [id, step] of Object.entries(config.steps)) if (!seen.has(id)) add(id, 'unreachable', step);

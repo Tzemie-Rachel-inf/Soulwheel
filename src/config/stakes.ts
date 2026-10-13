@@ -146,6 +146,7 @@ export const HOOKS: Record<string, HookDef> = {
   'hook:strange_tracks': { label: 'Strange Tracks', description: 'Too big for any beast on the bounty board.' },
   'hook:exiled_prince': { label: 'The Exiled Prince', description: 'Sworn to help win back a throne.' },
   'hook:blade_hungers': { label: 'A Hungry Blade', description: 'It wants blood. It is patient, but not forever.' },
+  'hook:abyss_debt': { label: 'The Abyss’s Price', description: 'It taught them a power. It will come back to collect.' },
   // Marks the older content leaves, read the same way.
   rival: { label: 'A Jealous Rival', description: 'Rivals cross their road more often.' },
   hunted: { label: 'A Price on Their Head', description: 'Ambushes on the road come twice as often.' },
@@ -162,6 +163,7 @@ const HOOK_PAYOFFS: [tag: string, stepId: string][] = [
   ['hook:strange_tracks', 'fight_apex'],
   ['hook:map', 'map_cache'],
   ['hook:margin_name', 'margin_name'],
+  ['hook:abyss_debt', 'abyss_collects'],
 ];
 export const PAYABLE_HOOKS = HOOK_PAYOFFS.map(([tag]) => tag);
 
@@ -664,6 +666,20 @@ const BLADE_DEMANDS: WheelStep = {
   ],
 };
 
+/** Learn a New Power from the Abyss leaves this debt (powers.ts); here it is collected. */
+const ABYSS_COLLECTS: WheelStep = {
+  id: 'abyss_collects',
+  title: 'The Abyss Collects',
+  subtitle: 'The voice that taught them is back, and it has brought the bill.',
+  options: [
+    { id: 'paid_in_blood', label: 'Paid in Blood', description: 'A season of fevers and black dreams. They wake up lighter, and weaker.', baseWeight: 30, rarity: 'common', removeTags: ['hook:abyss_debt'], statModifiers: { vitality: -2 }, meters: { wounds: 1 }, nextStepId: null, color: '#7a1c2e', icon: 'Droplet' },
+    { id: 'paid_in_luck', label: 'Paid in Luck', description: 'It took something they never saw. Dice have rolled low ever since.', baseWeight: 26, rarity: 'common', removeTags: ['hook:abyss_debt'], luckDelta: -0.5, nextStepId: null, color: '#4a3a5a', icon: 'Dices' },
+    { id: 'sent_a_collector', label: 'It Sent a Collector', description: 'They refused. So the Abyss sent someone who does not take no.', baseWeight: 20, rarity: 'uncommon', removeTags: ['hook:abyss_debt'], nextStepId: 'fight_champion', color: '#8a2e2e', icon: 'Swords' },
+    { id: 'outwitted_it', statScaling: { intellect: 0.06 }, label: 'Talked Their Way Out', description: 'They found the loophole in the bargain. The Abyss hates a lawyer.', baseWeight: 12, rarity: 'rare', removeTags: ['hook:abyss_debt'], fame: 6, nextStepId: null, color: '#c9a24c', icon: 'Scale' },
+    { id: 'another_bargain', label: 'Paid With a New Bargain', description: 'Debt, rolled into a bigger debt. Another gift, and its mark on their soul for good.', baseWeight: 8, rarity: 'epic', grantTags: ['marked'], nextStepId: POWER_WHEELS.corrupted, color: '#3a0a1a', icon: 'Flame' },
+  ],
+};
+
 const MAP_CACHE: WheelStep = {
   id: 'map_cache',
   title: 'Where the Map Leads',
@@ -913,6 +929,7 @@ export const STAKES_STEPS: WheelStep[] = [
   FOLLOWER,
   GRAVE_KIN,
   BLADE_DEMANDS,
+  ABYSS_COLLECTS,
   MAP_CACHE,
   MARGIN_NAME,
   PROPHECY,

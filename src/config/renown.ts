@@ -5,6 +5,7 @@
  *   a fight lost   nothing (surviving is its own reward)
  *   a road's end   by rarity: a common outcome 2, a rare one 8, a mythical one 30
  *   along the way  nothing: the wheel that leads to a fight or a lair earns no fame itself
+ *   coming home    at least 1 for the whole adventure (`floor`), so no season is wasted
  *
  * Options can set their own `fame` (a bard's song, a grave robbed). Fame unlocks the
  * crossroads' Destiny (Renowned) and Legendary Challenges (Famous), and `fameScaling` makes
@@ -34,6 +35,7 @@ const FAME_PER_POWER = 1 / 25;
 
 export const FAME_CONFIG: FameConfig = {
   tiers: FAME_TIERS,
+  floor: 1,
   earn: (option, step) => {
     if (step.foe && option.fight) {
       if (option.fight === 'lose') return 0;

@@ -16,15 +16,16 @@ export const SINGLETON = {
 } as const;
 
 export const PERSONALITIES = {
-  brave: { id: 'brave', name: 'Brave', description: 'Runs toward the screaming.' },
-  cautious: { id: 'cautious', name: 'Cautious', description: 'Checks every door twice.' },
-  kind: { id: 'kind', name: 'Kind', description: 'Gives away the last loaf.' },
-  curious: { id: 'curious', name: 'Curious', description: 'Opens the box. Always opens the box.' },
-  greedy: { id: 'greedy', name: 'Greedy', description: 'Counts everything twice and shares nothing.' },
-  reckless: { id: 'reckless', name: 'Reckless', description: 'Jumps first. Looks never.' },
-  honorable: { id: 'honorable', name: 'Honorable', description: 'Keeps every oath, even the stupid ones.' },
-  cruel: { id: 'cruel', name: 'Cruel', description: 'Enjoys it a little too much.' },
-  ambitious: { id: 'ambitious', name: 'Ambitious', description: 'Wants a throne. Any throne.' },
+  // Each personality also bends the crossroads a little, toward what that kind of soul would do with a free season.
+  brave: { id: 'brave', name: 'Brave', description: 'Runs toward the screaming.', odds: { crossroads: { challenge: 1.6, disaster: 1.6, war: 1.4 } } },
+  cautious: { id: 'cautious', name: 'Cautious', description: 'Checks every door twice.', odds: { crossroads: { train: 1.5, study: 1.4, craft: 1.4, make_enemy: 0.6 } } },
+  kind: { id: 'kind', name: 'Kind', description: 'Gives away the last loaf.', odds: { crossroads: { make_ally: 1.8, disaster: 1.5, make_enemy: 0.5 } } },
+  curious: { id: 'curious', name: 'Curious', description: 'Opens the box. Always opens the box.', odds: { crossroads: { explore: 1.6, hidden_place: 1.6, research: 1.5 } } },
+  greedy: { id: 'greedy', name: 'Greedy', description: 'Counts everything twice and shares nothing.', odds: { crossroads: { treasure: 2, find_weapon: 1.4, make_ally: 0.6 } } },
+  reckless: { id: 'reckless', name: 'Reckless', description: 'Jumps first. Looks never.', odds: { crossroads: { challenge: 1.6, make_enemy: 1.6, study: 0.5 } } },
+  honorable: { id: 'honorable', name: 'Honorable', description: 'Keeps every oath, even the stupid ones.', odds: { crossroads: { take_quest: 1.4, tournament: 1.6, make_enemy: 0.6 } } },
+  cruel: { id: 'cruel', name: 'Cruel', description: 'Enjoys it a little too much.', odds: { crossroads: { hunt: 1.6, make_enemy: 1.6, make_ally: 0.5 } } },
+  ambitious: { id: 'ambitious', name: 'Ambitious', description: 'Wants a throne. Any throne.', odds: { crossroads: { take_quest: 1.5, tournament: 1.5, war: 1.5 } } },
 } satisfies Record<string, Personality>;
 
 export type PersonalityId = keyof typeof PERSONALITIES;

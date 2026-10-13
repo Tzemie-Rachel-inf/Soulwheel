@@ -3,7 +3,8 @@
  * what the hero does, consequences that come due, and a finale shaped by all of it.
  */
 import { describe, expect, it } from 'vitest';
-import { GAME_CONFIG } from '../config/gameConfig';
+import { GAME_CONFIG as SAMPLE_CONFIG } from '../config/gameConfig';
+import type { GameConfig } from './types';
 import { chooseAdventure, completeAdventure, getAdventureStep, rollFullAdventure, spinAdventure, startAdventure, type AdventureState } from './adventure';
 import { createCharacter } from './character';
 import { EngineError } from './errors';
@@ -16,6 +17,9 @@ import { RIVAL_MAX_ESCALATIONS, applyStory } from './story';
 import type { Character, Rival, StoryState, World } from './types';
 import { validateGameConfig } from './validate';
 import { createWorld, placeCharacter } from './world';
+
+/** These tests walk single wheels, so a short adventure must end where its wheel says: no road home. */
+const GAME_CONFIG: GameConfig = { ...SAMPLE_CONFIG, adventure: { ...SAMPLE_CONFIG.adventure, roadHome: undefined } };
 
 function soul(seed: number, patch: Partial<Character> = {}): Character {
   return { ...createCharacter(GAME_CONFIG, { name: `Soul ${seed}`, rng: createSeededRng(seed), now: 0 }), status: 'alive', ...patch };

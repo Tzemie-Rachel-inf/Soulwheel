@@ -62,7 +62,7 @@ export function WorldPanel({ world, config, inspectedId, onInspect, onThreatChan
       </div>
 
       <div className="border-t-2 border-lead px-5 py-4">
-        <h3 className="font-caps text-sm tracking-wide text-ash">One-of-a-kind roles</h3>
+        <h3 className="font-caps text-base tracking-wide text-ash">One-of-a-kind roles</h3>
         {roles.length === 0 ? (
           <p className="mt-1 text-sm text-vellum">Every one-of-a-kind role is open.</p>
         ) : (
@@ -221,7 +221,7 @@ interface SoulListProps {
 function SoulList({ title, empty, souls, config, inspectedId, onInspect, icon, detail }: SoulListProps) {
   return (
     <div className="border-t-2 border-lead px-5 py-4">
-      <h3 className="font-caps text-sm tracking-wide text-ash">{title}</h3>
+      <h3 className="font-caps text-base tracking-wide text-ash">{title}</h3>
       {souls.length === 0 ? (
         <p className="mt-1 text-sm text-vellum">{empty}</p>
       ) : (

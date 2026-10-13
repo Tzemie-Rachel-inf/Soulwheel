@@ -18,7 +18,7 @@ import { FameMeter } from './FameMeter';
 import { Epitaph } from './Headstone';
 import { formatPercent, fullName, lifeOf, ordinal, raceName, roleLabel, signed } from './format';
 import { OddsList } from './OddsList';
-import { enter } from './motion';
+import { enter, returnToWheel } from './motion';
 import { ChoicePanel, QuestPanel, QuestTale } from './QuestPanel';
 import { OutcomeCard, primaryButton, secondaryButton } from './RollReveal';
 import { canNameHeir, houseOf } from '../engine/lineage';
@@ -118,7 +118,10 @@ export function AdventureTab({ config, world, hero: living, adventure, onCreateH
               <OutcomeCard
                 outcome={outcome}
                 config={config}
-                onContinue={adventure.next}
+                onContinue={() => {
+                  adventure.next();
+                  returnToWheel();
+                }}
                 finishLabel="See how it ends"
                 castName={roll?.cast}
                 note={roll?.note}
@@ -136,7 +139,10 @@ export function AdventureTab({ config, world, hero: living, adventure, onCreateH
                 ending={hero}
                 fameEarned={earned}
                 note={session.state.fate}
-                onAgain={(again) => adventure.embark(again)}
+                onAgain={(again) => {
+                  adventure.embark(again);
+                  returnToWheel();
+                }}
                 onNextSoul={onNextSoul}
                 canRaiseHeir={canNameHeir(world, findCharacter(world, hero.id) ?? hero)}
               />
@@ -157,6 +163,7 @@ export function AdventureTab({ config, world, hero: living, adventure, onCreateH
               slices={view.slices}
               winnerIndex={landed ? view.winnerIndex : null}
               title={view.step.title}
+              stepId={view.step.id}
               config={config}
               character={session.state.character}
               world={world}

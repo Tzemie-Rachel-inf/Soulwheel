@@ -602,7 +602,7 @@ describe('rarity', () => {
   it('warns when a rarer option is more likely than a more common one', () => {
     const { warnings } = validateGameConfig(withFateOption('demon_lord', { baseWeight: 60 }));
     expect(warnings).toEqual([
-      'fate › demon_lord: marked legendary (weight 60) but outweighs blessed, which is uncommon (weight 14).',
+      'fate › demon_lord: marked legendary (weight 60) but outweighs blessed, which is uncommon (weight 16).',
     ]);
   });
 
@@ -975,11 +975,12 @@ describe('personality and monsters', () => {
     expect(new Set(human.map((o) => o.label)).size).toBe(human.length); // every position its own name
   });
 
-  it('leaves most ordinary souls without a talent, and fewer lucky ones', () => {
+  it('leaves about a third of ordinary souls without a talent, and fewer lucky ones', () => {
     const talentsWheel = getStep(GAME_CONFIG, 'talents');
     const ordinary = (c: Character) =>
       resolveSlices(dealOptions(talentsWheel, c, GAME_CONFIG), freshWorld(), c).find((s) => s.option.id === 'ordinary')!.probability;
-    expect(ordinary(freshChar())).toBeGreaterThan(0.5);
+    expect(ordinary(freshChar())).toBeGreaterThan(0.3);
+    expect(ordinary(freshChar())).toBeLessThan(0.5);
     expect(ordinary({ ...freshChar(), luck: 1 })).toBeLessThan(ordinary(freshChar()));
   });
 
@@ -1095,11 +1096,11 @@ describe('stat rolls', () => {
     expect(unarmed({ ...freshChar(), luck: 1 })).toBeLessThan(unarmed(freshChar()) / 2);
   });
 
-  it('keeps Empty Hands at its old chance among seventeen weapons', () => {
-    // As before: 28 of 96.5 for a non-elf once a hero has fallen (the Heirloom unlocked).
+  it('makes Empty Hands about one soul in five among seventeen weapons', () => {
+    // 18 of 86.5 for a non-elf once a hero has fallen (the Heirloom unlocked).
     const mourning = withGraveyard(freshWorld(), 1);
     const empty = resolveSlices(dealOptions(armory, freshChar(), GAME_CONFIG), mourning, freshChar()).find((s) => s.option.id === 'empty_hands')!;
-    expect(empty.probability).toBeCloseTo(28 / 96.5, 9);
+    expect(empty.probability).toBeCloseTo(18 / 86.5, 9);
     expect(armory.options.filter((o) => o.weaponTierDelta).length).toBe(17);
   });
 });
