@@ -111,7 +111,7 @@ export interface SpinWheelProps {
 const NEAR_MISS_DEGREES = 4;
 const NEAR_MISS_MARGIN = 0.34;
 /** When a big prize sits right beside the result, how often the wheel stops a hair short of it. */
-const TEASE_CHANCE = 0.35;
+const TEASE_CHANCE = 0.07;
 
 /** Worth an "So close!": a slice that is open, rarer than the one landed, and legendary or better (or epic, after a common). */
 function missedBig(won: ResolvedSlice, other: ResolvedSlice): boolean {
