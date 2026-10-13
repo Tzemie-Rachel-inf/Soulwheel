@@ -4,7 +4,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { graves, martyrs, rivals, rulers, sealedSouls, townsfolk } from '../config/common';
-import { GAME_CONFIG } from '../config/gameConfig';
+import { GAME_CONFIG as SAMPLE_CONFIG } from '../config/gameConfig';
+import type { GameConfig } from './types';
 import { learnTechnique, takeEverything } from '../config/legacy';
 import { completeAdventure, getAdventureStep, spinAdventure, startAdventure, type AdventureState } from './adventure';
 import { MAX_ARMOR_TIER, applyEffects, createCharacter } from './character';
@@ -15,6 +16,9 @@ import { resolveSlices } from './roll';
 import type { Character, Trait, World } from './types';
 import { validateGameConfig } from './validate';
 import { createWorld, placeCharacter } from './world';
+
+/** These tests walk single wheels, so a short adventure must end where its wheel says: no road home. */
+const GAME_CONFIG: GameConfig = { ...SAMPLE_CONFIG, adventure: { ...SAMPLE_CONFIG.adventure, roadHome: undefined } };
 
 const trait = (id: string): Trait => GAME_CONFIG.traits[id]!;
 

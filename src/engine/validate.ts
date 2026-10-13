@@ -32,6 +32,9 @@ export function validateGameConfig(config: GameConfig): ValidationReport {
   if (!config.steps[config.entryStepId]) {
     errors.push(`entryStepId "${config.entryStepId}" does not match any wheel.`);
   }
+  if (config.adventure.roadHome && !config.steps[config.adventure.roadHome.stepId]) {
+    errors.push(`adventure.roadHome "${config.adventure.roadHome.stepId}" does not match any wheel.`);
+  }
   if (!config.steps[config.adventure.entryStepId]) {
     errors.push(`adventure.entryStepId "${config.adventure.entryStepId}" does not match any wheel.`);
   }
@@ -62,6 +65,9 @@ export function validateGameConfig(config: GameConfig): ValidationReport {
   for (const [key, archetype] of Object.entries(config.archetypes)) {
     if (archetype.id !== key) errors.push(`Archetype registered as "${key}" has id "${archetype.id}".`);
     checkOdds(`Archetype "${key}"`, archetype.odds);
+  }
+  for (const [key, personality] of Object.entries(config.personalities)) {
+    checkOdds(`Personality "${key}"`, personality.odds);
   }
   if (config.fallbackNames.length === 0) errors.push('fallbackNames must have at least one name.');
   const tiers = config.fame.tiers;
@@ -234,6 +240,8 @@ export function validateGameConfig(config: GameConfig): ValidationReport {
   for (const entry of entries) visit(entry, []);
   // A meter's trigger wheel is reached by the meter, not by an option.
   for (const meter of config.meters ?? []) visit(meter.trigger, []);
+  // So is the road home, by a short adventure.
+  if (config.adventure.roadHome) visit(config.adventure.roadHome.stepId, []);
 
   for (const key of Object.keys(config.steps)) {
     if (!visited.has(key)) warnings.push(`Wheel "${key}" is unreachable from "${entries.join('" or "')}".`);

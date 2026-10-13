@@ -11,7 +11,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Volume2, VolumeX } from 'lucide-react';
 import { GAME_CONFIG } from './config/gameConfig';
 import { DEV_TOOLS_ENABLED, WheelInspector } from './devtools';
-import { STAT_KEYS, type Character, type GameConfig, type WheelStep } from './engine/types';
+import { STAT_KEYS, type Character, type GameConfig, type WheelStep, type World } from './engine/types';
 import { validateGameConfig } from './engine/validate';
 import { findCharacter, playerHero } from './engine/world';
 import { useAdventure } from './state/useAdventure';
@@ -26,6 +26,7 @@ import { CharacterCard } from './ui/CharacterCard';
 import { OddsList } from './ui/OddsList';
 import { sound, useSoundMuted } from './ui/sound';
 import { RollReveal, primaryButton } from './ui/RollReveal';
+import { returnToWheel } from './ui/motion';
 import { WorldPanel } from './ui/WorldPanel';
 import { STAT_LABELS, signed } from './ui/format';
 import { isSpecialRarity, rarityOf } from './ui/rarity';
@@ -53,7 +54,8 @@ function Game({ config }: { config: GameConfig }) {
   const generation = useCharacterGeneration(config, world);
   const adventure = useAdventure(config, world, finishAdventure);
   const tracker = useProfileTracker(world, config);
-  const [tab, setTab] = useState<Tab>('create');
+  // A living hero's place is on the road: open there, even after a reload.
+  const [tab, setTab] = useState<Tab>(() => (playerHero(world) ? 'adventure' : 'create'));
   const [inspectedId, setInspectedId] = useState<string | null>(null);
   const [commitError, setCommitError] = useState<string | null>(null);
 
@@ -235,6 +237,7 @@ function Game({ config }: { config: GameConfig }) {
                 generation={generation}
                 adventure={adventure}
                 hero={hero ?? null}
+                world={world}
               />
               <WorldPanel
                 world={world}
@@ -335,11 +338,11 @@ function Crest() {
       <defs>
         <linearGradient id="crest-gilt" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#fff0bd" />
-          <stop offset="0.5" stopColor="#d2a542" />
+          <stop offset="0.5" stopColor="var(--color-gilt)" />
           <stop offset="1" stopColor="#7a561a" />
         </linearGradient>
         <linearGradient id="crest-field" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#b52a3c" />
+          <stop offset="0" stopColor="var(--color-gules-bright)" />
           <stop offset="1" stopColor="#6a1220" />
         </linearGradient>
       </defs>
@@ -348,7 +351,7 @@ function Crest() {
       <path d="M7.5 14h33v17c0 10.5-7 17.5-16.5 21C14.5 48.5 7.5 41.5 7.5 31Z" fill="url(#crest-field)" />
       <g fill="none" stroke="url(#crest-gilt)" strokeWidth="2">
         <circle cx="24" cy="30" r="10" />
-        <circle cx="24" cy="30" r="2.5" fill="#f0cd6c" />
+        <circle cx="24" cy="30" r="2.5" fill="var(--color-gilt-bright)" />
         <path d="M24 20v20M14 30h20M17 23l14 14M31 23 17 37" strokeWidth="1.4" />
       </g>
     </svg>
@@ -418,7 +421,10 @@ function CreateTab({ config, generation, parent, notice, commitError, onCommit, 
           character={view.character}
           config={config}
           commitError={commitError}
-          onContinue={generation.next}
+          onContinue={() => {
+            generation.next();
+            returnToWheel();
+          }}
           onCommit={onCommit}
           onDiscard={onDiscard}
         />
@@ -426,12 +432,13 @@ function CreateTab({ config, generation, parent, notice, commitError, onCommit, 
 
       {view.step && (
         <div className="mt-8">
-          <h2 className="gilt-rule font-caps text-sm tracking-wider text-ash">Odds on this wheel</h2>
+          <h2 className="gilt-rule font-caps text-base tracking-wider text-ash">Odds on this wheel</h2>
           <div className="mt-3">
             <OddsList
               slices={view.slices}
               winnerIndex={landed ? view.winnerIndex : null}
               title={view.step.title}
+              stepId={view.step.id}
               config={config}
               character={session.state.character}
             />
@@ -488,10 +495,11 @@ interface SideCardProps {
   adventure: ReturnType<typeof useAdventure>;
   /** The player's hero, while they live. */
   hero: Character | null;
+  world: World;
 }
 
 /** Whoever the player is looking at: an inspected soul, the one being rolled, or the player's hero. */
-function SideCard({ tab, config, inspected, onCloseInspect, generation, adventure, hero }: SideCardProps) {
+function SideCard({ tab, config, inspected, onCloseInspect, generation, adventure, hero, world }: SideCardProps) {
   if (inspected) {
     return (
       <CharacterCard
@@ -515,8 +523,11 @@ function SideCard({ tab, config, inspected, onCloseInspect, generation, adventur
     );
   }
   if (adventure.session && adventure.view) {
-    const { character, previous } = adventure.view;
-    const status = adventure.session.phase === 'complete' ? statusLine(character, 'home again') : 'on an adventure';
+    const { previous } = adventure.view;
+    const over = adventure.session.phase === 'complete';
+    // Once the road ends, the world holds the hero with this adventure written into their record.
+    const character = (over && findCharacter(world, adventure.view.character.id)) || adventure.view.character;
+    const status = over ? statusLine(character, 'home again') : 'on an adventure';
     return <CharacterCard character={character} previous={previous} config={config} status={status} />;
   }
   if (hero) return <CharacterCard character={hero} previous={null} config={config} status="between adventures" />;

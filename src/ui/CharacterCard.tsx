@@ -124,7 +124,7 @@ export function CharacterCard({ character, previous, config, status, onClose }: 
 
       {/* Combat power: the one hero figure on the page. */}
       <div className="border-t-2 border-lead px-5 py-4">
-        <p className="font-caps text-sm tracking-wide text-ash">Combat power</p>
+        <p className="font-caps text-base tracking-wide text-ash">Combat power</p>
         <p className="mt-1 flex items-baseline gap-3">
           <CountUp value={power.total} className="court-title font-caps text-6xl font-bold leading-none lining-nums tabular-nums" />
           {cpDelta !== 0 && <span className="text-lg text-moss">{signed(cpDelta)}</span>}
@@ -240,8 +240,8 @@ export function CharacterCard({ character, previous, config, status, onClose }: 
 
       <div className="border-t-2 border-lead px-5 py-4">
         <div className="flex items-baseline justify-between gap-3">
-          <h3 className="font-caps text-sm tracking-wide text-ash">Weapon tier</h3>
-          <p className="text-sm text-ash">
+          <h3 className="shrink-0 whitespace-nowrap font-caps text-base tracking-wide text-ash">Weapon tier</h3>
+          <p className="text-right text-sm text-ash">
             <span className="tabular-nums text-vellum">{character.weaponTier}</span> of {MAX_WEAPON_TIER}, worth{' '}
             <span className="tabular-nums text-vellum">{power.weapon}</span> CP
             {character.weaponTier > 0 && power.weaponScale !== 1 && (
@@ -251,8 +251,8 @@ export function CharacterCard({ character, previous, config, status, onClose }: 
         </div>
         <TierPips filled={character.weaponTier} max={MAX_WEAPON_TIER} on="bg-cp-weapon" off="border-cp-weapon/45" />
         <div className="mt-4 flex items-baseline justify-between gap-3">
-          <h3 className="font-caps text-sm tracking-wide text-ash">Armour tier</h3>
-          <p className="text-sm text-ash">
+          <h3 className="shrink-0 whitespace-nowrap font-caps text-base tracking-wide text-ash">Armour tier</h3>
+          <p className="text-right text-sm text-ash">
             <span className="tabular-nums text-vellum">{character.armorTier}</span> of {MAX_ARMOR_TIER}, worth{' '}
             <span className="tabular-nums text-vellum">{power.armor}</span> CP
             {character.armorTier > 0 && power.armorScale !== 1 && (
@@ -264,7 +264,7 @@ export function CharacterCard({ character, previous, config, status, onClose }: 
       </div>
 
       <div className="border-t-2 border-lead px-5 py-4">
-        <h3 className="font-caps text-sm tracking-wide text-ash">Traits</h3>
+        <h3 className="font-caps text-base tracking-wide text-ash">Traits</h3>
         {character.traits.length === 0 ? (
           <p className="mt-1 text-sm text-ash">None yet. The wheels decide what this soul carries.</p>
         ) : (
@@ -304,97 +304,130 @@ export function CharacterCard({ character, previous, config, status, onClose }: 
         )}
       </div>
 
-      <div className="border-t-2 border-lead px-5 py-4">
-        <h3 className="font-caps text-sm tracking-wide text-ash">Path through the wheels</h3>
-        {character.history.length === 0 ? (
-          <p className="mt-1 text-sm text-ash">Nothing rolled yet.</p>
-        ) : (
-          <ol className="mt-2 grid gap-2">
-            {character.history.map((roll) => {
-              const { step, option } = lookupRoll(config, roll);
-              const rarity = rarityOf(option);
-              return (
-                <li key={roll.stepId + roll.optionId} className="flex items-baseline justify-between gap-3">
-                  <span className="min-w-0">
-                    <span className="block text-xs text-ash">{step?.title ?? roll.stepId}</span>
-                    <span className="text-vellum">{option?.label ?? roll.optionId}</span>
-                    {roll.bumpedFrom && (
-                      <span className="ml-2 text-xs text-gilt-bright">
-                        hammered up from {step?.options.find((o) => o.id === roll.bumpedFrom)?.label ?? roll.bumpedFrom}
-                      </span>
-                    )}
-                    {rarity !== 'common' && (
-                      <span
-                        className="ml-2 text-[0.7rem] font-semibold uppercase tracking-wider"
-                        style={{ color: RARITY_STYLES[rarity].color }}
-                      >
-                        {RARITY_STYLES[rarity].label}
-                      </span>
-                    )}
-                  </span>
-                  <span className="shrink-0 text-sm text-ash">{formatOdds(roll.probability)}</span>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-      </div>
-
-      {character.adventures.length > 0 && (
-        <div className="border-t-2 border-lead px-5 py-4">
-          <h3 className="font-caps text-sm tracking-wide text-ash">Adventures</h3>
-          <ol className="mt-2 grid gap-2">
-            {character.adventures.map((adventure, n) => {
-              const fame = adventure.rolls.reduce((sum, roll) => sum + (roll.fame ?? 0), 0);
-              const notes = adventure.rolls.flatMap((roll) => (roll.note ? [roll.note] : []));
-              return (
-                <li key={n} className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-baseline gap-x-2">
-                  <span className="text-sm tabular-nums text-ash">{n + 1}.</span>
-                  <span className="min-w-0 text-vellum">
-                    {adventure.quest ? (
-                      // A quest is told by its story, not its thirty spins.
-                      <>
-                        <span className="font-semibold text-candle">Quest: {adventure.quest.title}</span>
-                        {adventure.quest.log.slice(1).map((line, i) => (
-                          <span key={i} className="block text-sm text-vellum">
-                            {line}
-                          </span>
-                        ))}
-                        {adventure.quest.rival && (
-                          <span className="block text-sm text-ember">
-                            Rival {adventure.quest.rival.name}: {adventure.quest.rival.fate}.
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      adventure.rolls
-                        .map((roll) => {
-                          const label = lookupRoll(config, roll).option?.label ?? roll.optionId;
-                          return roll.cast ? `${label} (${roll.cast})` : label;
-                        })
-                        .join(' → ')
-                    )}
-                    {notes.map((note) => (
-                      <span key={note} className="block text-sm text-gilt-bright">
-                        {note}
-                      </span>
-                    ))}
-                  </span>
-                  <span className="text-right text-sm">
-                    <span className={OUTCOME_TONE[adventure.outcome]}>{outcomeLabel(adventure)}</span>
-                    {fame !== 0 && (
-                      <span className={`block tabular-nums ${fame > 0 ? 'text-moss' : 'text-ember'}`}>{signed(fame)} fame</span>
-                    )}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
+      {/* While they're being rolled, the path is the story. Once they live, their adventures are,
+          newest first, and how the wheels made them folds away. */}
+      {character.status === 'rolling' ? (
+        <WheelPath character={character} config={config} />
+      ) : (
+        <>
+          <Adventures character={character} config={config} />
+          <WheelPath character={character} config={config} folded />
+        </>
       )}
 
       {character.status !== 'rolling' && <ShareRow character={character} config={config} />}
     </section>
+  );
+}
+
+/** Every wheel creation spun for them, with the odds. Folded away once they are out in the world. */
+function WheelPath({ character, config, folded = false }: { character: Character; config: GameConfig; folded?: boolean }) {
+  const list =
+    character.history.length === 0 ? (
+      <p className="mt-1 text-sm text-ash">Nothing rolled yet.</p>
+    ) : (
+      <ol className="mt-2 grid gap-2">
+        {character.history.map((roll) => {
+          const { step, option } = lookupRoll(config, roll);
+          const rarity = rarityOf(option);
+          return (
+            <li key={roll.stepId + roll.optionId} className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block text-xs text-ash">{step?.title ?? roll.stepId}</span>
+                <span className="text-vellum">{option?.label ?? roll.optionId}</span>
+                {roll.bumpedFrom && (
+                  <span className="ml-2 text-xs text-gilt-bright">
+                    hammered up from {step?.options.find((o) => o.id === roll.bumpedFrom)?.label ?? roll.bumpedFrom}
+                  </span>
+                )}
+                {rarity !== 'common' && (
+                  <span
+                    className="ml-2 text-[0.7rem] font-semibold uppercase tracking-wider"
+                    style={{ color: RARITY_STYLES[rarity].color }}
+                  >
+                    {RARITY_STYLES[rarity].label}
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0 text-sm text-ash">{formatOdds(roll.probability)}</span>
+            </li>
+          );
+        })}
+      </ol>
+    );
+  if (folded) {
+    return (
+      <details className="group border-t-2 border-lead px-5 py-4">
+        <summary className="cursor-pointer font-caps text-base tracking-wide text-ash hover:text-vellum">
+          Born of the wheels <span className="font-sans italic">({character.history.length} spins)</span>
+        </summary>
+        {list}
+      </details>
+    );
+  }
+  return (
+    <div className="border-t-2 border-lead px-5 py-4">
+      <h3 className="font-caps text-base tracking-wide text-ash">Path through the wheels</h3>
+      {list}
+    </div>
+  );
+}
+
+/** Their adventures, newest first. */
+function Adventures({ character, config }: { character: Character; config: GameConfig }) {
+  if (character.adventures.length === 0) return null;
+  return (
+    <div className="border-t-2 border-lead px-5 py-4">
+      <h3 className="font-caps text-base tracking-wide text-ash">Adventures</h3>
+      <ol className="mt-2 grid gap-2">
+        {[...character.adventures].reverse().map((adventure, i) => {
+          const n = character.adventures.length - 1 - i;
+          const fame = adventure.rolls.reduce((sum, roll) => sum + (roll.fame ?? 0), 0);
+          const notes = adventure.rolls.flatMap((roll) => (roll.note ? [roll.note] : []));
+          return (
+            <li key={n} className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-baseline gap-x-2">
+              <span className="text-sm tabular-nums text-ash">{n + 1}.</span>
+              <span className="min-w-0 text-vellum">
+                {adventure.quest ? (
+                  // A quest is told by its story, not its thirty spins.
+                  <>
+                    <span className="font-semibold text-candle">Quest: {adventure.quest.title}</span>
+                    {adventure.quest.log.slice(1).map((line, k) => (
+                      <span key={k} className="block text-sm text-vellum">
+                        {line}
+                      </span>
+                    ))}
+                    {adventure.quest.rival && (
+                      <span className="block text-sm text-ember">
+                        Rival {adventure.quest.rival.name}: {adventure.quest.rival.fate}.
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  adventure.rolls
+                    .map((roll) => {
+                      const label = lookupRoll(config, roll).option?.label ?? roll.optionId;
+                      return roll.cast ? `${label} (${roll.cast})` : label;
+                    })
+                    .join(' → ')
+                )}
+                {notes.map((note) => (
+                  <span key={note} className="block text-sm text-gilt-bright">
+                    {note}
+                  </span>
+                ))}
+              </span>
+              <span className="text-right text-sm">
+                <span className={OUTCOME_TONE[adventure.outcome]}>{outcomeLabel(adventure)}</span>
+                {fame !== 0 && (
+                  <span className={`block tabular-nums ${fame > 0 ? 'text-moss' : 'text-ember'}`}>{signed(fame)} fame</span>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 

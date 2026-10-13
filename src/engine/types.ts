@@ -105,6 +105,8 @@ export interface Personality {
   id: string;
   name: string;
   description: string;
+  /** How this personality bends other wheels, exactly like `Race.odds`: odds[stepId][optionId]. */
+  odds?: Record<string, Record<string, number>>;
 }
 
 /** An archetype (Warrior, Mage...). Options set it by id with `setArchetype`; characters store the id. */
@@ -891,6 +893,11 @@ export interface FameConfig {
    * hero faced it (a cast foe's power in place), so a harder fight can be worth more. Must be pure.
    */
   earn: (option: WheelOption, step: WheelStep, char: Character) => number;
+  /**
+   * The least fame an adventure earns when the hero comes home from it: a season on the road is
+   * still a story told. Only tops up an adventure that earned less (never one that lost fame on purpose).
+   */
+  floor?: number;
 }
 
 export interface AdventureConfig {
@@ -898,6 +905,12 @@ export interface AdventureConfig {
   entryStepId: string;
   /** The "who is it?" wheel, spun before a cast wheel that has two or more candidates. */
   castWheel: CastWheelConfig;
+  /**
+   * The way home: when the road would end before the hero has spun `minSpins` wheels on it (a
+   * "who is it?" wheel doesn't count), this wheel comes up first, once per adventure, so no
+   * adventure is a single errand. A full meter still has the last word before it.
+   */
+  roadHome?: { stepId: string; minSpins: number };
 }
 
 /** The look of the "who is it?" wheel. Each candidate gets an equal slice. */

@@ -111,7 +111,7 @@ export function SeedPanel({ character, fresh, parent, onRoll }: SeedPanelProps) 
 
       {results.length > 0 && (
         <div className="mt-3 border-t border-lead pt-2">
-          <p className="font-caps text-sm tracking-wide text-ash">Today’s Daily Soul, your runs</p>
+          <p className="font-caps text-base tracking-wide text-ash">Today’s Daily Soul, your runs</p>
           <ul className="mt-1 grid gap-1">
             {results.map((r) => (
               <li key={r.characterId} className="flex flex-wrap items-baseline gap-x-3 text-sm">

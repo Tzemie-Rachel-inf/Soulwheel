@@ -1,0 +1,224 @@
+{
+ "generated": "2026-10-13",
+ "method": "500 heroes per seed, 25 per world (scripts/life-sim.test.ts). before = the game just before the design-review fixes; after = with them.",
+ "seeds": {
+  "2026": {
+   "before": {
+    "lives": 500,
+    "adventures": 3210,
+    "medianAdventures": 5,
+    "p90Adventures": 13,
+    "flavorOnlyShare": 0.212,
+    "twoSpinShare": 0.513,
+    "midLengthShare": 0.13,
+    "decisionsPerAdventure": 0.194,
+    "withHype": 190,
+    "withIdentity": 133,
+    "withRemarkableEnding": 123,
+    "withThread": 94,
+    "veryInteresting": 258,
+    "legendary": 167,
+    "meterEvents": 116,
+    "placesFound": 159,
+    "placeReturns": 97,
+    "withMeterEvent": 94,
+    "forgettable": 23,
+    "highlightsHistogram": {
+     "0": 143,
+     "1": 103,
+     "2": 87,
+     "3+": 167
+    },
+    "hypePerLife": 0.6,
+    "endings": {
+     "Retired": 35,
+     "Fell": 329,
+     "Martyr": 21,
+     "New life": 110,
+     "Sealed in a relic": 5
+    }
+   },
+   "after": {
+    "lives": 500,
+    "adventures": 3138,
+    "medianAdventures": 5,
+    "p90Adventures": 13,
+    "flavorOnlyShare": 0.175,
+    "twoSpinShare": 0.078,
+    "midLengthShare": 0.307,
+    "decisionsPerAdventure": 0.214,
+    "withHype": 217,
+    "withIdentity": 144,
+    "withRemarkableEnding": 150,
+    "withThread": 107,
+    "veryInteresting": 294,
+    "legendary": 194,
+    "meterEvents": 143,
+    "placesFound": 237,
+    "placeReturns": 82,
+    "withMeterEvent": 110,
+    "forgettable": 14,
+    "highlightsHistogram": {
+     "0": 123,
+     "1": 100,
+     "2": 83,
+     "3+": 194
+    },
+    "hypePerLife": 0.766,
+    "endings": {
+     "Fell": 298,
+     "New life": 116,
+     "Martyr": 36,
+     "Victorious": 2,
+     "Retired": 46,
+     "Sealed in a relic": 2
+    }
+   }
+  },
+  "7": {
+   "before": {
+    "lives": 500,
+    "adventures": 3313,
+    "medianAdventures": 5,
+    "p90Adventures": 13,
+    "flavorOnlyShare": 0.212,
+    "twoSpinShare": 0.487,
+    "midLengthShare": 0.136,
+    "decisionsPerAdventure": 0.182,
+    "withHype": 186,
+    "withIdentity": 127,
+    "withRemarkableEnding": 124,
+    "withThread": 104,
+    "veryInteresting": 258,
+    "legendary": 180,
+    "meterEvents": 143,
+    "placesFound": 181,
+    "placeReturns": 121,
+    "withMeterEvent": 106,
+    "forgettable": 26,
+    "highlightsHistogram": {
+     "0": 136,
+     "1": 107,
+     "2": 77,
+     "3+": 180
+    },
+    "hypePerLife": 0.622,
+    "endings": {
+     "Fell": 340,
+     "Martyr": 33,
+     "Retired": 27,
+     "New life": 96,
+     "Sealed in a relic": 3,
+     "Victorious": 1
+    }
+   },
+   "after": {
+    "lives": 500,
+    "adventures": 3150,
+    "medianAdventures": 5,
+    "p90Adventures": 13,
+    "flavorOnlyShare": 0.167,
+    "twoSpinShare": 0.076,
+    "midLengthShare": 0.302,
+    "decisionsPerAdventure": 0.194,
+    "withHype": 206,
+    "withIdentity": 144,
+    "withRemarkableEnding": 155,
+    "withThread": 110,
+    "veryInteresting": 285,
+    "legendary": 190,
+    "meterEvents": 142,
+    "placesFound": 236,
+    "placeReturns": 76,
+    "withMeterEvent": 113,
+    "forgettable": 19,
+    "highlightsHistogram": {
+     "0": 116,
+     "1": 108,
+     "2": 86,
+     "3+": 190
+    },
+    "hypePerLife": 0.668,
+    "endings": {
+     "New life": 121,
+     "Fell": 300,
+     "Retired": 37,
+     "Martyr": 34,
+     "Sealed in a relic": 8
+    }
+   }
+  },
+  "99": {
+   "before": {
+    "lives": 500,
+    "adventures": 3508,
+    "medianAdventures": 6,
+    "p90Adventures": 13,
+    "flavorOnlyShare": 0.226,
+    "twoSpinShare": 0.491,
+    "midLengthShare": 0.142,
+    "decisionsPerAdventure": 0.195,
+    "withHype": 196,
+    "withIdentity": 153,
+    "withRemarkableEnding": 155,
+    "withThread": 112,
+    "veryInteresting": 285,
+    "legendary": 208,
+    "meterEvents": 132,
+    "placesFound": 172,
+    "placeReturns": 94,
+    "withMeterEvent": 98,
+    "forgettable": 29,
+    "highlightsHistogram": {
+     "0": 113,
+     "1": 104,
+     "2": 75,
+     "3+": 208
+    },
+    "hypePerLife": 0.66,
+    "endings": {
+     "Martyr": 26,
+     "New life": 126,
+     "Fell": 304,
+     "Retired": 38,
+     "Sealed in a relic": 6
+    }
+   },
+   "after": {
+    "lives": 500,
+    "adventures": 3290,
+    "medianAdventures": 5,
+    "p90Adventures": 14,
+    "flavorOnlyShare": 0.167,
+    "twoSpinShare": 0.075,
+    "midLengthShare": 0.312,
+    "decisionsPerAdventure": 0.206,
+    "withHype": 234,
+    "withIdentity": 160,
+    "withRemarkableEnding": 163,
+    "withThread": 111,
+    "veryInteresting": 309,
+    "legendary": 197,
+    "meterEvents": 163,
+    "placesFound": 262,
+    "placeReturns": 100,
+    "withMeterEvent": 107,
+    "forgettable": 11,
+    "highlightsHistogram": {
+     "0": 112,
+     "1": 97,
+     "2": 94,
+     "3+": 197
+    },
+    "hypePerLife": 0.794,
+    "endings": {
+     "Fell": 288,
+     "New life": 138,
+     "Retired": 40,
+     "Sealed in a relic": 4,
+     "Martyr": 30
+    }
+   }
+  }
+ }
+}

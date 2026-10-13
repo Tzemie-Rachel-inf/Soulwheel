@@ -3,7 +3,8 @@
  * with rules of their own, and encounters spun the way the hero would meet them.
  */
 import { describe, expect, it } from 'vitest';
-import { GAME_CONFIG } from '../config/gameConfig';
+import { GAME_CONFIG as SAMPLE_CONFIG } from '../config/gameConfig';
+import type { GameConfig } from './types';
 import { PLACE_KINDS } from '../config/stakes';
 import { completeAdventure, getAdventureStep, metersOf, openPlaces, spinAdventure, startAdventure, type AdventureState } from './adventure';
 import { applyEffects, createCharacter } from './character';
@@ -15,6 +16,9 @@ import { resolveSlices } from './roll';
 import type { Character, Place, World } from './types';
 import { wheelsWithoutHype } from './validate';
 import { createWorld, findCharacter, placeCharacter } from './world';
+
+/** These tests walk single wheels, so a short adventure must end where its wheel says: no road home. */
+const GAME_CONFIG: GameConfig = { ...SAMPLE_CONFIG, adventure: { ...SAMPLE_CONFIG.adventure, roadHome: undefined } };
 
 function soul(seed: number, patch: Partial<Character> = {}): Character {
   return { ...createCharacter(GAME_CONFIG, { name: `Soul ${seed}`, rng: createSeededRng(seed), now: 0 }), status: 'alive', ...patch };

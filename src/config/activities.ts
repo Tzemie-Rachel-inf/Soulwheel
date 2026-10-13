@@ -124,12 +124,12 @@ export const ACTIVITY_TRAITS: Record<string, Trait> = Object.fromEntries(
 export const CROSSROADS: WheelStep = {
   id: 'crossroads',
   title: 'What Will You Do?',
-  subtitle: 'A free season, a full pack, and a choice. The more famous they are, the riskier the roads they take.',
+  subtitle: 'A free season and a full pack. Who they are tilts the wheel; the more famous they are, the riskier the roads they take.',
   options: [
     { id: 'go_adventure', label: 'Go on an Adventure', description: 'The open road, and whatever is on it.', baseWeight: 24, rarity: 'common', nextStepId: 'road', color: '#7d8a6a', icon: 'Route' },
     { id: 'train', label: 'Train', description: 'Push one stat past where it stands.', baseWeight: 12, rarity: 'common', fameScaling: -0.1, nextStepId: 'train_stat', color: '#b8613a', icon: 'Dumbbell' },
     { id: 'explore', label: 'Explore', description: 'Find out what is past the last map.', baseWeight: 9, rarity: 'common', nextStepId: 'explore', color: '#4f8a5b', icon: 'Compass' },
-    { id: 'find_weapon', label: 'Find a Weapon', description: 'Something sharper than what they carry.', baseWeight: 8, rarity: 'common', condition: (_world, char) => char.weaponTier < BEST_FOUND_GEAR, lockedReason: 'Nothing on the road beats the weapon they carry', nextStepId: 'find_weapon', color: '#a16207', icon: 'Sword' },
+    { id: 'find_weapon', label: 'Find a Weapon', description: 'Something sharper than what they carry. Twice as likely for empty hands.', baseWeight: 8, vary: (char) => (char.weaponTier === 0 ? { baseWeight: 16 } : {}), rarity: 'common', condition: (_world, char) => char.weaponTier < BEST_FOUND_GEAR, lockedReason: 'Nothing on the road beats the weapon they carry', nextStepId: 'find_weapon', color: '#a16207', icon: 'Sword' },
     { id: 'find_armor', label: 'Find Armour', description: 'Something between them and the next blade.', baseWeight: 7, rarity: 'common', condition: (_world, char) => char.armorTier < BEST_FOUND_GEAR, lockedReason: 'Nothing on the road beats the armour they wear', nextStepId: 'find_armor', color: '#6f7a8a', icon: 'Shield' },
     { id: 'take_quest', label: 'Take a Quest', description: 'A real story: five to seven hard roads, choices that matter, maybe a rival, and an ending shaped by all of it.', baseWeight: 16, rarity: 'common', fameScaling: 0.1, nextStepId: 'quest_hook', color: '#e0a83a', icon: 'ScrollText' },
     { id: 'seek_old_face', label: 'Seek Out an Old Face', description: 'A grave, a rival, a legend, a ruler: someone from the old stories.', baseWeight: 7, rarity: 'common', nextStepId: 'old_faces', color: '#4f86b8', icon: 'Users' },
@@ -998,8 +998,29 @@ const ACTIVITY_FIGHTS: WheelStep[] = [
   }),
 ];
 
+/**
+ * The way home, for an adventure that would otherwise be over in a spin or two
+ * (`AdventureConfig.roadHome`). Every slice is something: a story, a fight, a thread for later.
+ */
+const ROAD_HOME: WheelStep = {
+  id: 'road_home',
+  title: 'On the Road Home',
+  subtitle: 'The errand is done. The road back is never quite empty.',
+  options: [
+    { id: 'tavern_tale', label: 'A Tale at the Tavern', description: 'They told it well. By morning, half the room was telling it too.', baseWeight: 24, rarity: 'common', fame: 3, nextStepId: null, color: '#c9a24c', icon: 'Beer' },
+    { id: 'waylaid', label: 'Waylaid', description: 'Steel in the dark, a mile from home.', baseWeight: 20, rarity: 'common', nextStepId: 'fight_bandits', color: '#a35d3a', icon: 'Swords' },
+    { id: 'followed_home', label: 'Followed', description: 'Footprints behind theirs, every night. Whatever it is, it is patient.', baseWeight: 12, rarity: 'common', grantTags: ['hook:followed'], fame: 1, nextStepId: null, color: '#6e6a62', icon: 'Footprints' },
+    { id: 'stranger_in_need', label: 'A Stranger in Need', description: 'A cart in a ditch, a family beside it. Someone like that remembers a kindness.', baseWeight: 12, rarity: 'common', nextStepId: 'make_ally', color: '#3f7a9a', icon: 'Handshake' },
+    { id: 'strange_tracks', label: 'Strange Tracks', description: 'Too big for any beast they know. They made a note of where.', baseWeight: 10, rarity: 'uncommon', grantTags: ['hook:strange_tracks'], fame: 1, nextStepId: null, color: '#5b3f6e', icon: 'PawPrint' },
+    { id: 'an_old_map', label: 'An Old Map in a Dead Man’s Pack', description: 'An X, a hill, and a blade drawn beside it.', baseWeight: 8, rarity: 'uncommon', grantTags: ['hook:map'], fame: 1, nextStepId: null, color: '#a16207', icon: 'Map' },
+    { id: 'shortcut_ruins', label: 'A Shortcut Through Old Ruins', description: 'It was not on the map. It is now.', baseWeight: 6, rarity: 'rare', place: { discover: 'ruin' }, nextStepId: 'ruins', color: '#4f8a5b', icon: 'Landmark' },
+    { id: 'omen', label: 'An Omen in the Sky', description: 'A comet, and that night a dream that will not let them go.', baseWeight: 3, rarity: 'epic', grantTags: ['hook:prophecy'], fame: 4, nextStepId: null, color: '#ffe08a', icon: 'Sparkles' },
+  ],
+};
+
 export const ACTIVITY_STEPS: WheelStep[] = [
   CROSSROADS,
+  ROAD_HOME,
   EXPLORE,
   FIND_WEAPON,
   MAKE_ALLY,

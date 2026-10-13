@@ -142,7 +142,13 @@ function powerWheel(school: School): WheelStep {
           icon: p.icon,
         }),
       ),
-      { ...surge, id: 'surge', nextStepId: POWERS_ROUTE },
+      // A power wheel teaches a power. The surge only gets a slice once every power here is known.
+      {
+        ...surge,
+        id: 'surge',
+        vary: (char) => ({ baseWeight: powers.every((p) => hasTrait(char, p.id)) ? surge.baseWeight : 0 }),
+        nextStepId: POWERS_ROUTE,
+      },
     ],
   };
 }
@@ -249,7 +255,7 @@ const POWER_SCHOOL: WheelStep = {
       color: '#e6d48a',
       icon: 'Sun',
     },
-    { id: 'corrupted', omenScaling: { eclipse: 2 }, label: 'The Abyss', description: 'A voice in the dark, offering help.', baseWeight: 25, rarity: 'uncommon', grantTags: ['tainted'], nextStepId: POWER_WHEELS.corrupted, color: '#7f1d2e', icon: 'Flame' },
+    { id: 'corrupted', omenScaling: { eclipse: 2 }, label: 'The Abyss', description: 'A voice in the dark, offering help. It will want paying, later.', baseWeight: 25, rarity: 'uncommon', grantTags: ['hook:abyss_debt'], nextStepId: POWER_WHEELS.corrupted, color: '#7f1d2e', icon: 'Flame' },
   ],
 };
 

@@ -1,32 +1,34 @@
-# React + TypeScript + Vite
+# Soulwheel
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Roll a soul. Send it into the world.
 
-Currently, two official plugins are available:
+A wheel-spinning hero generator and life sim. Every part of a hero is rolled on a weighted wheel. The hero then lives one life, start to finish, in a persistent world with houses, a Demon Lord, a graveyard and a Hall of Fame. What the game is for and the rules it keeps are in [PRODUCT.md](PRODUCT.md).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Running it
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+- `npm run build`: typecheck and build.
+- `npx vitest run src`: the test suite.
+- `npm run lint`: oxlint.
+
+## Where things live
+
+- `src/config/`: all game content: wheels, races, archetypes, powers, quests, stakes, fame. `gameConfig.ts` puts it together, and `src/engine/validate.ts` checks it at boot.
+- `src/engine/`: the rules. Pure functions, with no React.
+- `src/state/`: React hooks over the engine.
+- `src/ui/`: components. The wheel is painted on a canvas in `ui/wheel/paintWheel.ts`.
+- `src/devtools/`: the dev-only Wheels tab, plus the life simulator.
+
+## Balance
+
+After any content change, re-run the life simulator and compare it against the last report:
+
+```bash
+LIFE_SIM_OUT=report.json npx vitest run scripts/life-sim.test.ts
+```
+
+Reference docs are in `docs/`: the creation and adventure wheel trees, the stat ladders, a quest playtest, and design reviews.

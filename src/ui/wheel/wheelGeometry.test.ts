@@ -70,8 +70,8 @@ describe('layoutSlices (the Zero Percent Trap)', () => {
     const calm = layoutSlices(resolveSlices(fate.options, world, char));
     const dark = layoutSlices(resolveSlices(fate.options, { ...world, threatLevel: 8 }, char));
     expect(dark).toEqual(calm);
-    // The Demon Lord is 6 of Fate's 84 base weight: 7.1% of the wheel.
-    expect(calm[3]!.sweep / 360).toBeCloseTo(6 / 84, 9);
+    // The Demon Lord is 5 of Fate's 67 base weight: 7.5% of the wheel.
+    expect(calm[3]!.sweep / 360).toBeCloseTo(5 / 67, 9);
   });
 
   it('still lands every winner the RNG picks, locked slices never among them', () => {
