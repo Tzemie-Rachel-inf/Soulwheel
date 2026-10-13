@@ -1,0 +1,103 @@
+/**
+ * React wrapper around the generation session. The engine call that picks the winner
+ * happens here, in the event handler, so state updaters stay pure (StrictMode safe).
+ *
+ * A soul can be rolled from a seed (the Daily Soul, or one a player typed): every spin then
+ * draws from that seed, so the same seed rolls the same soul. The character's id stays
+ * random, so rolling a seed twice never puts two souls with one id in the world.
+ *
+ * A soul can also be someone's heir (engine/lineage.ts): born into their house.
+ */
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { EngineError } from '../engine/errors';
+import { spinCurrentStep } from '../engine/generation';
+import { asHeir } from '../engine/lineage';
+import { defaultRng, seededFrom, type Rng } from '../engine/rng';
+import type { Character, GameConfig, World } from '../engine/types';
+import type { SpinRequest, UpgradeRequest } from '../ui/wheel/SpinWheel';
+import { advance, createSession, finishUpgrade, settleSpin, startSpin, viewSession } from './generationSession';
+
+/** How a new soul begins, beyond chance: from a seed, or as someone's heir. */
+export interface SoulStart {
+  seed?: string;
+  /** The day, when this is that day's Daily Soul. */
+  daily?: string;
+  /** The parent, when this soul is born into their house. */
+  heirOf?: Character;
+}
+
+/** A new soul, unnamed until its last wheel: the name and title come from what it rolls. */
+function freshSession(config: GameConfig, from: SoulStart | null = null) {
+  const session = createSession(config);
+  if (!from) return session;
+  let character = session.state.character;
+  if (from.seed) character = { ...character, seed: from.seed, ...(from.daily && { daily: from.daily }) };
+  if (from.heirOf) character = asHeir(character, from.heirOf);
+  return { ...session, state: { ...session.state, character } };
+}
+
+export function useCharacterGeneration(config: GameConfig, world: World) {
+  const [session, setSession] = useState(() => freshSession(config));
+  const [error, setError] = useState<string | null>(null);
+  /** Where this soul's spins come from: a seed's own stream, or chance. */
+  const rng = useRef<Rng>(defaultRng);
+
+  const view = useMemo(() => viewSession(session, config, world), [session, config, world]);
+
+  /** The request the wheel animates. Same object for the whole spin, a new one per spin. */
+  const pending = session.pending;
+  const spinRequest = useMemo<SpinRequest | null>(
+    () =>
+      session.phase === 'spinning' && pending
+        ? { id: session.spinCount, targetIndex: pending.roll.winner.index }
+        : null,
+    [session.phase, session.spinCount, pending],
+  );
+
+  /** The bump the wheel plays after landing, while `upgrading`. Same object for the whole bump. */
+  const upgradeRequest = useMemo<UpgradeRequest | null>(
+    () =>
+      session.phase === 'upgrading' && pending?.bump
+        ? {
+            id: session.spinCount,
+            path: pending.bump.path,
+            overflow: pending.bump.overflow,
+            direction: pending.bump.stages < 0 ? -1 : 1,
+            effect: pending.step.upgradeEffect,
+          }
+        : null,
+    [session.phase, session.spinCount, pending],
+  );
+
+  const spin = useCallback(() => {
+    if (session.phase !== 'ready') return;
+    try {
+      const outcome = spinCurrentStep(session.state, config, world, rng.current);
+      setError(null);
+      setSession((s) => startSpin(s, outcome));
+    } catch (err) {
+      setError(
+        err instanceof EngineError && err.code === 'NO_ELIGIBLE_OPTIONS'
+          ? 'Every slice on this wheel is locked. Change the world, or give this wheel an option with no conditions.'
+          : err instanceof Error
+            ? err.message
+            : String(err),
+      );
+    }
+  }, [session, config, world]);
+
+  const settle = useCallback((spinId: number) => setSession((s) => settleSpin(s, spinId)), []);
+  const upgraded = useCallback((spinId: number) => setSession((s) => finishUpgrade(s, spinId)), []);
+  const next = useCallback(() => setSession(advance), []);
+  /** A new soul: by chance, from a seed, or as someone's heir. */
+  const restart = useCallback(
+    (from: SoulStart | null = null) => {
+      setError(null);
+      rng.current = from?.seed ? seededFrom(from.seed) : defaultRng;
+      setSession(freshSession(config, from));
+    },
+    [config],
+  );
+
+  return { session, view, spinRequest, upgradeRequest, error, spin, settle, upgraded, next, restart };
+}
