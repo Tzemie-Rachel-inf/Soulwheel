@@ -1,0 +1,577 @@
+{
+ "generated": "2026-10-13",
+ "method": "500 heroes per seed, 25 per persistent world, world turns between adventures, choice wheels autopicked by weight. baseline = the game before Every Spin Matters (backup copy). beginnersLuck = experiment, not shipped.",
+ "seeds": [
+  2026,
+  7,
+  99
+ ],
+ "perSeed": {
+  "baseline": [
+   {
+    "seed": 2026,
+    "lives": 500,
+    "adventures": 3103,
+    "medianAdventures": 5,
+    "p90Adventures": 12,
+    "flavorOnlyShare": 0.337,
+    "twoSpinShare": 0.48,
+    "midLengthShare": 0.157,
+    "decisionsPerAdventure": 0.455,
+    "withHype": 76,
+    "withIdentity": 102,
+    "withRemarkableEnding": 119,
+    "withThread": 84,
+    "veryInteresting": 178,
+    "legendary": 98,
+    "meterEvents": 0,
+    "placesFound": 0,
+    "placeReturns": 0,
+    "withMeterEvent": 0,
+    "forgettable": 65,
+    "highlightsHistogram": {
+     "0": 188,
+     "1": 124,
+     "2": 90,
+     "3+": 98
+    },
+    "hypePerLife": 0.18,
+    "endings": {
+     "Fell": 330,
+     "Retired": 45,
+     "Martyr": 29,
+     "New life": 88,
+     "Sealed in a relic": 7,
+     "Victorious": 1
+    }
+   },
+   {
+    "seed": 7,
+    "lives": 500,
+    "adventures": 3341,
+    "medianAdventures": 5,
+    "p90Adventures": 13,
+    "flavorOnlyShare": 0.341,
+    "twoSpinShare": 0.488,
+    "midLengthShare": 0.136,
+    "decisionsPerAdventure": 0.476,
+    "withHype": 90,
+    "withIdentity": 115,
+    "withRemarkableEnding": 130,
+    "withThread": 75,
+    "veryInteresting": 196,
+    "legendary": 115,
+    "meterEvents": 0,
+    "placesFound": 0,
+    "placeReturns": 0,
+    "withMeterEvent": 0,
+    "forgettable": 73,
+    "highlightsHistogram": {
+     "0": 204,
+     "1": 109,
+     "2": 72,
+     "3+": 115
+    },
+    "hypePerLife": 0.232,
+    "endings": {
+     "Fell": 328,
+     "New life": 102,
+     "Sealed in a relic": 8,
+     "Martyr": 26,
+     "Retired": 35,
+     "Victorious": 1
+    }
+   },
+   {
+    "seed": 99,
+    "lives": 500,
+    "adventures": 3246,
+    "medianAdventures": 5,
+    "p90Adventures": 12,
+    "flavorOnlyShare": 0.343,
+    "twoSpinShare": 0.499,
+    "midLengthShare": 0.138,
+    "decisionsPerAdventure": 0.448,
+    "withHype": 74,
+    "withIdentity": 100,
+    "withRemarkableEnding": 110,
+    "withThread": 67,
+    "veryInteresting": 165,
+    "legendary": 82,
+    "meterEvents": 0,
+    "placesFound": 0,
+    "placeReturns": 0,
+    "withMeterEvent": 0,
+    "forgettable": 78,
+    "highlightsHistogram": {
+     "0": 214,
+     "1": 124,
+     "2": 80,
+     "3+": 82
+    },
+    "hypePerLife": 0.178,
+    "endings": {
+     "Fell": 348,
+     "Retired": 39,
+     "New life": 87,
+     "Martyr": 20,
+     "Sealed in a relic": 6
+    }
+   }
+  ],
+  "current": [
+   {
+    "seed": 2026,
+    "lives": 500,
+    "adventures": 3337,
+    "medianAdventures": 5,
+    "p90Adventures": 13,
+    "flavorOnlyShare": 0.215,
+    "twoSpinShare": 0.487,
+    "midLengthShare": 0.135,
+    "decisionsPerAdventure": 0.196,
+    "withHype": 166,
+    "withIdentity": 133,
+    "withRemarkableEnding": 125,
+    "withThread": 127,
+    "veryInteresting": 254,
+    "legendary": 180,
+    "meterEvents": 131,
+    "placesFound": 164,
+    "placeReturns": 120,
+    "withMeterEvent": 103,
+    "forgettable": 16,
+    "highlightsHistogram": {
+     "0": 137,
+     "1": 91,
+     "2": 92,
+     "3+": 180
+    },
+    "hypePerLife": 0.512,
+    "endings": {
+     "Retired": 43,
+     "New life": 108,
+     "Fell": 323,
+     "Martyr": 20,
+     "Victorious": 1,
+     "Sealed in a relic": 4,
+     "still adventuring": 1
+    }
+   },
+   {
+    "seed": 7,
+    "lives": 500,
+    "adventures": 3442,
+    "medianAdventures": 6,
+    "p90Adventures": 15,
+    "flavorOnlyShare": 0.224,
+    "twoSpinShare": 0.463,
+    "midLengthShare": 0.14,
+    "decisionsPerAdventure": 0.197,
+    "withHype": 184,
+    "withIdentity": 132,
+    "withRemarkableEnding": 128,
+    "withThread": 117,
+    "veryInteresting": 254,
+    "legendary": 176,
+    "meterEvents": 125,
+    "placesFound": 169,
+    "placeReturns": 103,
+    "withMeterEvent": 96,
+    "forgettable": 21,
+    "highlightsHistogram": {
+     "0": 146,
+     "1": 94,
+     "2": 84,
+     "3+": 176
+    },
+    "hypePerLife": 0.546,
+    "endings": {
+     "Fell": 338,
+     "Martyr": 21,
+     "New life": 108,
+     "Sealed in a relic": 6,
+     "Retired": 27
+    }
+   },
+   {
+    "seed": 99,
+    "lives": 500,
+    "adventures": 3389,
+    "medianAdventures": 5,
+    "p90Adventures": 13,
+    "flavorOnlyShare": 0.211,
+    "twoSpinShare": 0.486,
+    "midLengthShare": 0.14,
+    "decisionsPerAdventure": 0.202,
+    "withHype": 185,
+    "withIdentity": 128,
+    "withRemarkableEnding": 120,
+    "withThread": 111,
+    "veryInteresting": 253,
+    "legendary": 182,
+    "meterEvents": 102,
+    "placesFound": 176,
+    "placeReturns": 104,
+    "withMeterEvent": 84,
+    "forgettable": 29,
+    "highlightsHistogram": {
+     "0": 136,
+     "1": 108,
+     "2": 74,
+     "3+": 182
+    },
+    "hypePerLife": 0.57,
+    "endings": {
+     "Martyr": 21,
+     "New life": 101,
+     "Fell": 330,
+     "Retired": 42,
+     "Victorious": 1,
+     "Sealed in a relic": 5
+    }
+   }
+  ],
+  "beginnersLuck": [
+   {
+    "seed": 2026,
+    "lives": 500,
+    "adventures": 3628,
+    "medianAdventures": 6,
+    "p90Adventures": 13,
+    "flavorOnlyShare": 0.216,
+    "twoSpinShare": 0.484,
+    "midLengthShare": 0.145,
+    "decisionsPerAdventure": 0.201,
+    "withHype": 184,
+    "withIdentity": 154,
+    "withRemarkableEnding": 134,
+    "withThread": 139,
+    "veryInteresting": 273,
+    "legendary": 202,
+    "meterEvents": 149,
+    "placesFound": 193,
+    "placeReturns": 115,
+    "withMeterEvent": 118,
+    "forgettable": 23,
+    "highlightsHistogram": {
+     "0": 108,
+     "1": 101,
+     "2": 89,
+     "3+": 202
+    },
+    "hypePerLife": 0.598,
+    "endings": {
+     "Retired": 35,
+     "New life": 118,
+     "Fell": 319,
+     "Martyr": 24,
+     "Sealed in a relic": 4
+    }
+   },
+   {
+    "seed": 7,
+    "lives": 500,
+    "adventures": 3872,
+    "medianAdventures": 7,
+    "p90Adventures": 15,
+    "flavorOnlyShare": 0.223,
+    "twoSpinShare": 0.46,
+    "midLengthShare": 0.152,
+    "decisionsPerAdventure": 0.189,
+    "withHype": 203,
+    "withIdentity": 146,
+    "withRemarkableEnding": 139,
+    "withThread": 129,
+    "veryInteresting": 286,
+    "legendary": 199,
+    "meterEvents": 185,
+    "placesFound": 204,
+    "placeReturns": 106,
+    "withMeterEvent": 150,
+    "forgettable": 16,
+    "highlightsHistogram": {
+     "0": 99,
+     "1": 96,
+     "2": 106,
+     "3+": 199
+    },
+    "hypePerLife": 0.594,
+    "endings": {
+     "Fell": 308,
+     "Martyr": 27,
+     "New life": 110,
+     "Sealed in a relic": 7,
+     "Retired": 47,
+     "Victorious": 1
+    }
+   },
+   {
+    "seed": 99,
+    "lives": 500,
+    "adventures": 3455,
+    "medianAdventures": 6,
+    "p90Adventures": 13,
+    "flavorOnlyShare": 0.213,
+    "twoSpinShare": 0.48,
+    "midLengthShare": 0.149,
+    "decisionsPerAdventure": 0.197,
+    "withHype": 185,
+    "withIdentity": 137,
+    "withRemarkableEnding": 139,
+    "withThread": 113,
+    "veryInteresting": 273,
+    "legendary": 174,
+    "meterEvents": 124,
+    "placesFound": 168,
+    "placeReturns": 99,
+    "withMeterEvent": 92,
+    "forgettable": 19,
+    "highlightsHistogram": {
+     "0": 117,
+     "1": 109,
+     "2": 100,
+     "3+": 174
+    },
+    "hypePerLife": 0.548,
+    "endings": {
+     "Martyr": 28,
+     "New life": 117,
+     "Fell": 313,
+     "Retired": 36,
+     "Sealed in a relic": 6
+    }
+   }
+  ]
+ },
+ "pooled": {
+  "baseline": {
+   "n": 1500,
+   "strict": 35.9,
+   "broad": 42.3,
+   "zero": 40.4,
+   "three": 19.7,
+   "forgettable": 14.4,
+   "hypeLife": 16,
+   "identity": 21.1,
+   "remarkable": 23.9,
+   "thread": 15.1,
+   "meter": 0,
+   "flavor": 34.1,
+   "twoSpin": 48.9,
+   "decisions": 0.46,
+   "hypePerLife": 0.2,
+   "advPerLife": 6.5,
+   "median": [
+    5,
+    5,
+    5
+   ],
+   "earlyDeath": 19.6,
+   "perSeedStrict": [
+    178,
+    196,
+    165
+   ],
+   "perSeedBroad": [
+    221,
+    218,
+    196
+   ],
+   "perSeedZero": [
+    188,
+    204,
+    214
+   ],
+   "hist": [
+    40.4,
+    23.8,
+    16.1,
+    19.7
+   ],
+   "buckets": [
+    [
+     325,
+     11
+    ],
+    [
+     472,
+     26
+    ],
+    [
+     446,
+     46
+    ],
+    [
+     257,
+     68
+    ]
+   ],
+   "places": 0,
+   "returns": 0,
+   "meterEvents": 0
+  },
+  "current": {
+   "n": 1500,
+   "strict": 50.7,
+   "broad": 60.2,
+   "zero": 27.9,
+   "three": 35.9,
+   "forgettable": 4.4,
+   "hypeLife": 35.7,
+   "identity": 26.2,
+   "remarkable": 24.9,
+   "thread": 23.7,
+   "meter": 18.9,
+   "flavor": 21.7,
+   "twoSpin": 47.9,
+   "decisions": 0.2,
+   "hypePerLife": 0.54,
+   "advPerLife": 6.8,
+   "median": [
+    5,
+    6,
+    5
+   ],
+   "earlyDeath": 18.3,
+   "perSeedStrict": [
+    254,
+    254,
+    253
+   ],
+   "perSeedBroad": [
+    310,
+    297,
+    296
+   ],
+   "perSeedZero": [
+    137,
+    146,
+    136
+   ],
+   "hist": [
+    27.9,
+    19.5,
+    16.7,
+    35.9
+   ],
+   "buckets": [
+    [
+     309,
+     16
+    ],
+    [
+     451,
+     37
+    ],
+    [
+     450,
+     67
+    ],
+    [
+     290,
+     83
+    ]
+   ],
+   "places": 509,
+   "returns": 327,
+   "meterEvents": 358
+  },
+  "beginnersLuck": {
+   "n": 1500,
+   "strict": 55.5,
+   "broad": 67,
+   "zero": 21.6,
+   "three": 38.3,
+   "forgettable": 3.9,
+   "hypeLife": 38.1,
+   "identity": 29.1,
+   "remarkable": 27.5,
+   "thread": 25.4,
+   "meter": 24,
+   "flavor": 21.7,
+   "twoSpin": 47.4,
+   "decisions": 0.2,
+   "hypePerLife": 0.58,
+   "advPerLife": 7.3,
+   "median": [
+    6,
+    7,
+    6
+   ],
+   "earlyDeath": 10.7,
+   "perSeedStrict": [
+    273,
+    286,
+    273
+   ],
+   "perSeedBroad": [
+    333,
+    350,
+    322
+   ],
+   "perSeedZero": [
+    108,
+    99,
+    117
+   ],
+   "hist": [
+    21.6,
+    20.4,
+    19.7,
+    38.3
+   ],
+   "buckets": [
+    [
+     204,
+     24
+    ],
+    [
+     460,
+     38
+    ],
+    [
+     518,
+     66
+    ],
+    [
+     318,
+     84
+    ]
+   ],
+   "places": 565,
+   "returns": 320,
+   "meterEvents": 458
+  }
+ },
+ "hypeCoverage": {
+  "baseline": {
+   "wheels": 177,
+   "withHype": 73
+  },
+  "current": {
+   "wheels": 212,
+   "withHype": 194,
+   "without": [
+    "train_stat",
+    "old_faces",
+    "power_school",
+    "master_power",
+    "transform",
+    "whispering_blade",
+    "the_bite",
+    "abyss_offer",
+    "enc_relic",
+    "quest_finale",
+    "enc_witch",
+    "enc_witch_price",
+    "fin_siege",
+    "fin_escape",
+    "fin_lair",
+    "fin_duel",
+    "fin_parley",
+    "fin_alliance"
+   ]
+  }
+ }
+}
