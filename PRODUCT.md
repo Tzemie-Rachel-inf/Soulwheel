@@ -26,7 +26,7 @@ Played in a desktop browser, in sessions of a few minutes to an hour. Tabs: Crea
 
 - React 19 + Vite + Tailwind 4; motion via framer-motion; icons from lucide-react.
 - Wheels are painted on canvas (src/ui/wheel/paintWheel.ts).
-- No git: backups live in E:\Chronicle\backups\ (pre-fantasy-redesign holds the cathedral-glass look).
+- Git repo in chronicle-react (baseline commit 2026-10-13). Older folder backups live in E:\Chronicle\backups\ (pre-fantasy-redesign holds the cathedral-glass look).
 - Sound effects with a mute toggle; prefers-reduced-motion is honoured.
 
 ## Brand Commitments
