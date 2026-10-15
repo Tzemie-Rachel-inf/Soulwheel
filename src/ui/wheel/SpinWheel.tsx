@@ -29,11 +29,14 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent,
   type PointerEvent,
 } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Lock } from 'lucide-react';
+import { forceNextRoll } from '../../engine/roll';
 import { createSeededRng } from '../../engine/rng';
+import { useDevPick } from '../devPick';
 import { RARITIES, type ResolvedSlice } from '../../engine/types';
 import { formatPercent, optionLabel } from '../format';
 import { sound } from '../sound';
@@ -156,6 +159,7 @@ export function SpinWheel({
   /** The last spin that came to rest: a new value replays the landing effects. */
   const [landedSpin, setLandedSpin] = useState(0);
   const [hover, setHover] = useState<{ index: number; x: number; y: number } | null>(null);
+  const devPick = useDevPick();
   /** A far rarer slice the last spin stopped beside. */
   const [nearMiss, setNearMiss] = useState<{ spin: number; index: number; slice: ResolvedSlice } | null>(null);
   /** Where the current bump has knocked the result so far. */
@@ -369,6 +373,20 @@ export function SpinWheel({
     setHover(index < 0 ? null : { index, x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
 
+  // Dev pick mode: a click on an open slice spins the wheel and lands it there.
+  const handlePick = (e: MouseEvent<HTMLDivElement>) => {
+    if (!devPick || !canSpin || spinningRef.current || size === 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const dx = e.clientX - rect.left - rect.width / 2;
+    const dy = e.clientY - rect.top - rect.height / 2;
+    const r = Math.hypot(dx, dy) / (size / 2);
+    if (r < L.hub || r > 1) return;
+    const slice = slices[sliceAtScreenAngle(screenAngleOf(dx, dy), rotationRef.current, arcs)];
+    if (!slice || slice.locked) return;
+    forceNextRoll(slice.option.id);
+    onSpinRequest();
+  };
+
   const R = size / 2;
   const paintR = size / 2 - 1; // the radius paintWheel uses, so roundels and icons agree
   const hubSize = R * L.hub * 2 - 6;
@@ -401,6 +419,8 @@ export function SpinWheel({
             className="absolute inset-0 rounded-full"
             onPointerMove={handlePointerMove}
             onPointerLeave={() => setHover(null)}
+            onClick={handlePick}
+            style={devPick && canSpin && !spinning ? { cursor: 'crosshair' } : undefined}
           >
             <div ref={rotorRef} className="absolute inset-0" style={{ willChange: 'transform' }}>
               <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 h-full w-full" />

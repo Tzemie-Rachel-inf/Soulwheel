@@ -14,7 +14,7 @@ import { RARITIES, STAT_KEYS, type AdventureRecord, type Character, type GameCon
 import { CountUp } from './CountUp';
 import { FameMeter } from './FameMeter';
 import { Epitaph } from './Headstone';
-import { STAT_LABELS, displayName, formatOdds, humanizeKey, raceName, roleLabel, signed } from './format';
+import { STAT_LABELS, displayName, formatOdds, humanizeKey, heroRace, roleLabel, signed } from './format';
 import { RARITY_STYLES, rarityOf, statRarity } from './rarity';
 import { copyLegend, saveLegendImage } from './share';
 
@@ -42,7 +42,7 @@ export function CharacterCard({ character, previous, config, status, onClose }: 
   const cpDelta = before ? power.total - before.total : 0;
   const statMax = Math.max(40, Math.ceil(Math.max(...STAT_KEYS.map((k) => character.stats[k])) / 10) * 10);
   const barTotal = Math.max(1, power.stats + Math.max(0, power.weapon) + Math.max(0, power.armor) + Math.max(0, power.traits));
-  const race = raceName(config, character.race);
+  const race = heroRace(config, character);
   const role = roleLabel(character);
   const personality = character.personality ? config.personalities[character.personality] : undefined;
   const archetype = character.archetype ? config.archetypes[character.archetype] : undefined;

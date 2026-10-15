@@ -8,9 +8,10 @@
  */
 import { Suspense, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Volume2, VolumeX } from 'lucide-react';
+import { Crosshair, Volume2, VolumeX } from 'lucide-react';
 import { GAME_CONFIG } from './config/gameConfig';
 import { DEV_TOOLS_ENABLED, WheelInspector } from './devtools';
+import { setDevPick, useDevPick } from './ui/devPick';
 import { STAT_KEYS, type Character, type GameConfig, type WheelStep, type World } from './engine/types';
 import { validateGameConfig } from './engine/validate';
 import { findCharacter, playerHero } from './engine/world';
@@ -171,7 +172,8 @@ function Game({ config }: { config: GameConfig }) {
                 wheels: 'dev',
               }}
             />
-            <div className="pt-4">
+            <div className="flex gap-2 pt-4">
+              {DEV_TOOLS_ENABLED && <DevPickToggle />}
               <SoundToggle />
             </div>
           </div>
@@ -256,6 +258,23 @@ function Game({ config }: { config: GameConfig }) {
 }
 
 // ─── Tabs ───────────────────────────────────────────────────────────────────
+
+/** Dev only: while on, clicking a wheel slice spins it and lands there. */
+function DevPickToggle() {
+  const on = useDevPick();
+  return (
+    <button
+      type="button"
+      onClick={() => setDevPick(!on)}
+      aria-pressed={on}
+      aria-label={on ? 'Dev pick on: click a slice to land on it. Turn it off' : 'Dev pick off. Turn it on'}
+      title={on ? 'Dev pick ON: click a slice to land on it' : 'Dev pick: click a slice to land on it'}
+      className="btn-plaque p-2"
+    >
+      <Crosshair aria-hidden="true" size={18} className={on ? 'text-candle' : 'text-ash'} />
+    </button>
+  );
+}
 
 function SoundToggle() {
   const muted = useSoundMuted();

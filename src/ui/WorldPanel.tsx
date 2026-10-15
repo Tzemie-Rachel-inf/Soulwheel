@@ -12,7 +12,7 @@ import { calculatePowerRating } from '../engine/power';
 import type { Character, GameConfig, World } from '../engine/types';
 import { fameStanding } from '../engine/fame';
 import { activeOmens } from '../engine/roll';
-import { humanizeKey, raceName, roleLabel } from './format';
+import { humanizeKey, heroRace, roleLabel } from './format';
 import { Graveyard } from './Headstone';
 
 interface WorldPanelProps {
@@ -229,7 +229,7 @@ function SoulList({ title, empty, souls, config, inspectedId, onInspect, icon, d
           {souls.map((c) => {
             const { Icon, tone } = icon(c);
             const active = inspectedId === c.id;
-            const race = raceName(config, c.race);
+            const race = heroRace(config, c);
             const extra = detail(c);
             return (
               <li key={c.id}>

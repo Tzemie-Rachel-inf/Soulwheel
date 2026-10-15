@@ -9,7 +9,7 @@
 import { fameStanding } from '../engine/fame';
 import { calculatePowerRating, traitPower } from '../engine/power';
 import type { Character, GameConfig, Trait } from '../engine/types';
-import { fullName, ordinal, raceName, roleLabel } from './format';
+import { fullName, ordinal, heroRace, roleLabel } from './format';
 
 /** A stable pick from a list, by the character's id. */
 function pick<T>(items: readonly T[], seed: string): T {
@@ -37,7 +37,7 @@ export function signatureTrait(char: Character): Trait | null {
 
 /** 'Dwarf Cleric', 'Hero', 'Orc Warlord': who they were, in two words. */
 export function whoTheyWere(char: Character, config: GameConfig): string {
-  const race = raceName(config, char.race);
+  const race = heroRace(config, char);
   const calling = char.archetype ? (config.archetypes[char.archetype]?.name ?? null) : null;
   return [race, calling ?? roleLabel(char)].filter(Boolean).join(' ');
 }

@@ -225,7 +225,8 @@ export function validateGameConfig(config: GameConfig): ValidationReport {
   const visited = new Set<string>();
   const visit = (id: string, path: string[]): void => {
     if (visiting.has(id)) {
-      if (!config.steps[id]?.repeats) warnings.push(`Cycle: ${[...path, id].join(' → ')} (allowed, but capped per character).`);
+      const loop = [...path.slice(path.indexOf(id)), id];
+      if (!loop.some((s) => config.steps[s]?.repeats)) warnings.push(`Cycle: ${[...path, id].join(' → ')} (allowed, but capped per character).`);
       return;
     }
     if (visited.has(id)) return;

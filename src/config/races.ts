@@ -14,7 +14,10 @@
  * archetype, fate, personality, talents, the armory, the road.
  */
 import type { Character, Race, Trait, WheelOption, WheelStep, World } from '../engine/types';
+import { racesOf } from '../engine/character';
 import { NAMES } from './names';
+
+export { BLOOD_TAG, racesOf } from '../engine/character';
 
 // ─── The races ──────────────────────────────────────────────────────────────
 
@@ -296,9 +299,12 @@ export const RACES = {
 
 export type RaceId = keyof typeof RACES;
 
-/** True for the race itself and every race of its family: isRace('elf') holds for a Wood Elf. */
+/**
+ * True for the race itself and every race of its family: isRace('elf') holds for a Wood Elf.
+ * A hybrid counts as both of their races.
+ */
 export const isRace = (race: RaceId) => (_world: World, char: Character) =>
-  char.race === race || (char.race !== null && (RACES as Record<string, Race>)[char.race]?.family === race);
+  racesOf(char).some((r) => r === race || (RACES as Record<string, Race>)[r]?.family === race);
 
 export const RACE_TRAITS = {
   draconic_blood: { id: 'draconic_blood', name: 'Draconic Blood', description: 'Scales turn steel. Breath turns battles.', power: 25 },
@@ -334,102 +340,121 @@ function withBloodline(step: WheelStep): WheelStep {
   };
 }
 
+/**
+ * The Ancestry wheel's slices. Corrupted demons, ascended angels, undead constructs and hybrids
+ * roll this same wheel again (see otherworldly.ts), minus the origin that sent them there.
+ */
+export const ANCESTRY_OPTIONS: WheelOption[] = [
+  { id: 'human', label: 'Human', description: 'Adaptable to a fault.', baseWeight: 34, rarity: 'common', setRace: 'human', nextStepId: 'human_homeland', color: '#c2874f', icon: 'User' },
+  { id: 'elf', label: 'Elf', description: 'Born listening to things no one else can hear. But which elves?', baseWeight: 16, rarity: 'uncommon', setRace: 'elf', nextStepId: 'elf_lineage', color: '#2f9e7a', icon: 'Leaf' },
+  { id: 'dwarf', label: 'Dwarf', description: 'Carved more than born.', baseWeight: 16, rarity: 'uncommon', setRace: 'dwarf', nextStepId: 'dwarf_clan', color: '#9b4d32', icon: 'Pickaxe' },
+  { id: 'orc', label: 'Orc', description: 'The war-drums started before you could walk.', baseWeight: 14, rarity: 'uncommon', setRace: 'orc', nextStepId: 'orc_standing', color: '#5d7d24', icon: 'BicepsFlexed' },
+  {
+    id: 'halfling',
+    label: 'Halfling',
+    description: 'Easy to overlook, and luckier than they have any right to be.',
+    baseWeight: 12,
+    rarity: 'uncommon',
+    setRace: 'halfling',
+    luckDelta: 0.5,
+    nextStepId: 'halfling_hearth',
+    color: '#4f86b8',
+    icon: 'Clover',
+  },
+  { id: 'gnome', label: 'Gnome', description: 'Small hands, big ideas, frequent explosions.', baseWeight: 10, rarity: 'uncommon', setRace: 'gnome', nextStepId: 'gnome_workshop', color: '#b06ab8', icon: 'Cog' },
+  {
+    id: 'monster',
+    label: 'Monster',
+    description: 'Something people lock their doors against. But which something?',
+    baseWeight: 8,
+    rarity: 'uncommon',
+    grantTags: ['monster'],
+    nextStepId: 'monster_type',
+    color: '#5c4b3c',
+    icon: 'PawPrint',
+  },
+  {
+    id: 'dragonborn',
+    label: 'Dragonborn',
+    description: 'Hatched, not born, and proud of it.',
+    baseWeight: 5,
+    rarity: 'rare',
+    setRace: 'dragonborn',
+    grantTraits: ['draconic_blood'],
+    nextStepId: 'dragon_bloodline',
+    color: '#b8323a',
+    icon: 'Egg',
+  },
+  {
+    id: 'construct',
+    label: 'Construct',
+    description: 'Built, not born. But by whom, and how?',
+    baseWeight: 2.5,
+    rarity: 'epic',
+    grantTags: ['construct'],
+    nextStepId: 'construct_type',
+    color: '#8a8f9a',
+    icon: 'Bot',
+  },
+  {
+    id: 'celestial', // the id predates the name: rolled as Angel
+    label: 'Angel',
+    description: 'Born of light, or raised to it. Almost never corrupted.',
+    baseWeight: 1.2,
+    rarity: 'legendary',
+    threatScaling: -0.1, // the heavens look away as the world darkens
+    grantTags: ['angel'],
+    queueSpins: { blessed_powers: 1 },
+    nextStepId: 'angel_origin',
+    color: '#e9dcae',
+    icon: 'Feather',
+  },
+  {
+    id: 'demon',
+    label: 'Demon',
+    description: 'The Abyss has a child up here. Very few stay on the right side.',
+    baseWeight: 1.2,
+    rarity: 'legendary',
+    threatScaling: 0.2, // the dark calls its own
+    grantTags: ['fiend'],
+    queueSpins: { corrupted_powers: 1 },
+    nextStepId: 'fiend_origin',
+    color: '#9a1c2e',
+    icon: 'Flame',
+  },
+  {
+    id: 'god',
+    label: 'God',
+    description: 'A god, born into the world. Three blessed powers, and a domain no other god may hold.',
+    baseWeight: 0.4,
+    rarity: 'mythical',
+    setRace: 'god',
+    grantTags: ['divine'],
+    queueSpins: { blessed_powers: 3 },
+    nextStepId: 'god_domain',
+    color: '#ffe08a',
+    icon: 'Sun',
+  },
+  {
+    id: 'hybrid',
+    label: 'Hybrid',
+    description: 'Two bloodlines in one body. Spin Ancestry twice: both races, and everything both of them give.',
+    baseWeight: 1.2,
+    rarity: 'legendary',
+    grantTags: ['hybrid'],
+    queueSpins: { hybrid_second: 1 },
+    epithet: { text: 'the Twice-Born', priority: 40 },
+    nextStepId: 'hybrid_first',
+    color: '#ffb84d',
+    icon: 'Dna',
+  },
+];
+
 export const ANCESTRY: WheelStep = withBloodline({
   id: 'ancestry',
   title: 'Wheel of Ancestry',
   subtitle: 'Every soul begins here.',
-  options: [
-    { id: 'human', label: 'Human', description: 'Adaptable to a fault.', baseWeight: 34, rarity: 'common', setRace: 'human', nextStepId: 'human_homeland', color: '#c2874f', icon: 'User' },
-    { id: 'elf', label: 'Elf', description: 'Born listening to things no one else can hear. But which elves?', baseWeight: 16, rarity: 'uncommon', setRace: 'elf', nextStepId: 'elf_lineage', color: '#2f9e7a', icon: 'Leaf' },
-    { id: 'dwarf', label: 'Dwarf', description: 'Carved more than born.', baseWeight: 16, rarity: 'uncommon', setRace: 'dwarf', nextStepId: 'dwarf_clan', color: '#9b4d32', icon: 'Pickaxe' },
-    { id: 'orc', label: 'Orc', description: 'The war-drums started before you could walk.', baseWeight: 14, rarity: 'uncommon', setRace: 'orc', nextStepId: 'orc_standing', color: '#5d7d24', icon: 'BicepsFlexed' },
-    {
-      id: 'halfling',
-      label: 'Halfling',
-      description: 'Easy to overlook, and luckier than they have any right to be.',
-      baseWeight: 12,
-      rarity: 'uncommon',
-      setRace: 'halfling',
-      luckDelta: 0.5,
-      nextStepId: 'halfling_hearth',
-      color: '#4f86b8',
-      icon: 'Clover',
-    },
-    { id: 'gnome', label: 'Gnome', description: 'Small hands, big ideas, frequent explosions.', baseWeight: 10, rarity: 'uncommon', setRace: 'gnome', nextStepId: 'gnome_workshop', color: '#b06ab8', icon: 'Cog' },
-    {
-      id: 'monster',
-      label: 'Monster',
-      description: 'Something people lock their doors against. But which something?',
-      baseWeight: 8,
-      rarity: 'uncommon',
-      grantTags: ['monster'],
-      nextStepId: 'monster_type',
-      color: '#5c4b3c',
-      icon: 'PawPrint',
-    },
-    {
-      id: 'dragonborn',
-      label: 'Dragonborn',
-      description: 'Hatched, not born, and proud of it.',
-      baseWeight: 5,
-      rarity: 'rare',
-      setRace: 'dragonborn',
-      grantTraits: ['draconic_blood'],
-      nextStepId: 'dragon_bloodline',
-      color: '#b8323a',
-      icon: 'Egg',
-    },
-    {
-      id: 'construct',
-      label: 'Construct',
-      description: 'Built, not born. But by whom, and how?',
-      baseWeight: 2.5,
-      rarity: 'epic',
-      grantTags: ['construct'],
-      nextStepId: 'construct_type',
-      color: '#8a8f9a',
-      icon: 'Bot',
-    },
-    {
-      id: 'celestial', // the id predates the name: rolled as Angel
-      label: 'Angel',
-      description: 'Born of light, or raised to it. Almost never corrupted.',
-      baseWeight: 1.2,
-      rarity: 'legendary',
-      threatScaling: -0.1, // the heavens look away as the world darkens
-      grantTags: ['angel'],
-      queueSpins: { blessed_powers: 1 },
-      nextStepId: 'angel_origin',
-      color: '#e9dcae',
-      icon: 'Feather',
-    },
-    {
-      id: 'demon',
-      label: 'Demon',
-      description: 'The Abyss has a child up here. Very few stay on the right side.',
-      baseWeight: 1.2,
-      rarity: 'legendary',
-      threatScaling: 0.2, // the dark calls its own
-      grantTags: ['fiend'],
-      queueSpins: { corrupted_powers: 1 },
-      nextStepId: 'fiend_origin',
-      color: '#9a1c2e',
-      icon: 'Flame',
-    },
-    {
-      id: 'god',
-      label: 'God',
-      description: 'A god, born into the world. Three blessed powers, and a domain no other god may hold.',
-      baseWeight: 0.4,
-      rarity: 'mythical',
-      setRace: 'god',
-      grantTags: ['divine'],
-      queueSpins: { blessed_powers: 3 },
-      nextStepId: 'god_domain',
-      color: '#ffe08a',
-      icon: 'Sun',
-    },
-  ],
+  options: ANCESTRY_OPTIONS,
 });
 
 export const MONSTER_TYPE: WheelStep = {

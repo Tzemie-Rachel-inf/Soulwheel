@@ -9,7 +9,7 @@ import { calculatePowerRating } from '../engine/power';
 import type { LadderBump } from '../engine/ladder';
 import type { Character, GameConfig, ResolvedSlice } from '../engine/types';
 import type { GenerationPhase } from '../state/generationSession';
-import { ROLE_LABELS, describeEffects, formatOdds, fullName, humanizeKey, optionLabel, raceName, signed, unlockedBy } from './format';
+import { ROLE_LABELS, describeEffects, formatOdds, fullName, humanizeKey, optionLabel, heroRace, signed, unlockedBy } from './format';
 import { getOptionIcon } from './icons';
 import { enter } from './motion';
 import { resultOf, type RevealedOutcome } from './outcome';
@@ -214,7 +214,7 @@ function RolledIcon({ slice, glass, burstColor }: { slice: ResolvedSlice; glass:
 
 function Complete({ character, config, commitError, onCommit, onDiscard }: RollRevealProps) {
   const roles = character.singletonClaims.map(humanizeKey);
-  const race = raceName(config, character.race);
+  const race = heroRace(config, character);
   const sworn = character.role === 'minion';
   const [name, setName] = useState(character.name);
   const nameId = useId();

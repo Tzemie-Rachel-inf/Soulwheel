@@ -19,6 +19,7 @@
  *
  * Stat values are dealt as written: banked bonuses move a stat roll after it lands (ladder.ts).
  */
+import { racesOf } from './character';
 import { fameFactor } from './fame';
 import { STAT_BASELINE, calculatePowerRating, calculateWinProbability } from './power';
 import { STAT_KEYS, type Character, type GameConfig, type WheelOption, type WheelStep } from './types';
@@ -37,12 +38,15 @@ export function luckFactor(option: WheelOption, char: Character): number {
 
 /**
  * How the character's race bends one option: its own `odds` entry, else its family's, else 1.
- * Never negative; non-finite collapses to 0.
+ * A hybrid's races stack: each one's factor multiplies in. Never negative; non-finite collapses to 0.
  */
 export function raceFactor(stepId: string, optionId: string, char: Character, config: GameConfig): number {
-  const race = char.race === null ? undefined : config.races[char.race];
-  const family = race?.family === undefined ? undefined : config.races[race.family];
-  const factor = race?.odds?.[stepId]?.[optionId] ?? family?.odds?.[stepId]?.[optionId] ?? 1;
+  let factor = 1;
+  for (const id of racesOf(char)) {
+    const race = config.races[id];
+    const family = race?.family === undefined ? undefined : config.races[race.family];
+    factor *= race?.odds?.[stepId]?.[optionId] ?? family?.odds?.[stepId]?.[optionId] ?? 1;
+  }
   return Number.isFinite(factor) ? Math.max(0, factor) : 0;
 }
 
@@ -61,8 +65,8 @@ export function canBeDealt(option: WheelOption, char: Character, config?: GameCo
   if (option.requiresTrait && !option.requiresTrait.some((id) => char.traits.some((t) => t.id === id))) return false;
   if (option.requiresTag && !option.requiresTag.some((tag) => char.tags.includes(tag))) return false;
   if (option.requiresRace) {
-    const family = char.race === null ? undefined : config?.races[char.race]?.family;
-    if (!option.requiresRace.some((race) => race === char.race || race === family)) return false;
+    const mine = racesOf(char).flatMap((id) => [id, config?.races[id]?.family]);
+    if (!option.requiresRace.some((race) => mine.includes(race))) return false;
   }
   return true;
 }
