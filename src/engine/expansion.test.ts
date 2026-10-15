@@ -4,6 +4,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { GAME_CONFIG } from '../config/gameConfig';
+import { isRace } from '../config/races';
+import { heroRace } from '../ui/format';
 import { POWERS_ROUTE } from '../config/powers';
 import { BONUS_SPELL_ARCANA, trainStepId } from '../config/stats';
 import {
@@ -15,8 +17,8 @@ import {
   type AdventureState,
 } from './adventure';
 import { applyOption, createCharacter, earnedTitle, nameCharacter } from './character';
-import { getStep, resolveNextStep, rollFullCharacter } from './generation';
-import { dealOptions } from './odds';
+import { getStep, resolveNextStep, rollFullCharacter, spinCurrentStep, startGeneration } from './generation';
+import { dealOptions, raceFactor } from './odds';
 import { calculatePowerRating, getPowerBreakdown, traitPower } from './power';
 import { createSeededRng } from './rng';
 import { resolveSlices } from './roll';
@@ -160,6 +162,118 @@ describe('demons and angels', () => {
     const just = take(take(take(soul(), 'ancestry', 'demon'), 'fiend_origin', 'natural'), 'god_domain', 'justice');
     const fate = getStep(GAME_CONFIG, 'fate').options.find((o) => o.id === 'normal_fate')!;
     expect(resolveNextStep(fate.nextStepId, world(), just)).toBe('personality');
+  });
+});
+
+describe('ancestry, again: corrupted, ascended, undead and hybrid souls', () => {
+  /** Where an option sends this character (who has already taken it). */
+  const after = (char: Character, stepId: string, optionId: string) =>
+    resolveNextStep(getStep(GAME_CONFIG, stepId).options.find((o) => o.id === optionId)!.nextStepId, world(), char);
+  const ids = (stepId: string) => getStep(GAME_CONFIG, stepId).options.map((o) => o.id);
+  const ancestry = ids('ancestry');
+
+  it('rolls the whole Ancestry wheel again, minus the origin that sent them', () => {
+    expect(ids('corrupted_from')).toEqual(ancestry.filter((id) => id !== 'demon'));
+    expect(ids('ascended_from')).toEqual(ancestry.filter((id) => id !== 'celestial'));
+    expect(ids('resurrected_from')).toEqual(ancestry.filter((id) => id !== 'construct'));
+    expect(ids('hybrid_first')).toEqual(ancestry.filter((id) => id !== 'hybrid'));
+  });
+
+  it('runs a corrupted mortal through their race’s own wheels before the Abyss names their sin', () => {
+    let char = take(take(soul(), 'ancestry', 'demon'), 'fiend_origin', 'corrupted');
+    expect(char.spinQueue).toContain('fallen_sin');
+    char = take(char, 'corrupted_from', 'elf');
+    expect(after(char, 'corrupted_from', 'elf')).toBe('elf_lineage');
+    char = take(char, 'elf_lineage', 'star_elf');
+    expect(after(char, 'elf_lineage', 'star_elf')).toBe('fallen_sin');
+    char = take(char, 'fallen_sin', 'wrath');
+    expect(after(char, 'fallen_sin', 'wrath')).toBe('archetype');
+    // Everything stacks: the elven line's race and trait, and the Abyss's.
+    expect(char.race).toBe('star_elf');
+    expect(char.traits.map((t) => t.id)).toEqual(expect.arrayContaining(['starlight', 'demonic_corruption']));
+    expect(char.statBonus.might).toBe(3);
+  });
+
+  it('runs an ascended mortal through their race’s wheels, then their virtue', () => {
+    let char = take(take(take(soul(), 'ancestry', 'celestial'), 'angel_origin', 'ascended'), 'ascended_from', 'dwarf');
+    char = take(char, 'dwarf_clan', 'runeforged');
+    expect(after(char, 'dwarf_clan', 'runeforged')).toBe('angel_virtue');
+    char = take(char, 'angel_virtue', 'chastity');
+    expect(char.statBonus.arcana).toBe(4);
+    expect(char.traits.map((t) => t.id)).toContain('ascended_soul');
+  });
+
+  it('nests detours innermost first, and never lets a soul take the same origin twice', () => {
+    // A corrupted mortal who was once an ascended angel: the virtue comes before the sin.
+    let char = take(take(soul(), 'ancestry', 'demon'), 'fiend_origin', 'corrupted');
+    char = take(take(char, 'corrupted_from', 'celestial'), 'angel_origin', 'ascended');
+    expect(chance('ascended_from', 'demon', char)).toBe(0);
+    char = take(take(char, 'ascended_from', 'human'), 'human_homeland', 'farmstead');
+    expect(after(char, 'human_homeland', 'farmstead')).toBe('angel_virtue');
+    char = take(char, 'angel_virtue', 'kindness');
+    expect(after(char, 'angel_virtue', 'kindness')).toBe('fallen_sin');
+    char = take(char, 'fallen_sin', 'pride');
+    expect(after(char, 'fallen_sin', 'pride')).toBe('archetype');
+  });
+
+  it('keeps an undead construct’s ancestry, wheels and all', () => {
+    let char = take(take(take(soul(), 'ancestry', 'construct'), 'construct_type', 'undead'), 'resurrected_from', 'monster');
+    expect(ids('resurrected_from')).not.toContain('construct');
+    char = take(take(char, 'monster_type', 'minotaur'), 'labyrinth', 'arena_champion');
+    expect(after(char, 'labyrinth', 'arena_champion')).toBe('archetype');
+    expect(char.race).toBe('minotaur');
+    expect(char.traits.map((t) => t.id)).toContain('reanimated');
+  });
+
+  it('makes a hybrid of two races, both of whose wheels and odds stack', () => {
+    let char = take(soul(), 'ancestry', 'hybrid');
+    expect(after(char, 'ancestry', 'hybrid')).toBe('hybrid_first');
+    char = take(take(char, 'hybrid_first', 'orc'), 'orc_standing', 'berserker');
+    expect(after(char, 'orc_standing', 'berserker')).toBe('hybrid_second');
+    // Not the same ancestry twice, and not a hybrid of hybrids.
+    expect(chance('hybrid_second', 'orc', char)).toBe(0);
+    expect(ids('hybrid_second')).not.toContain('hybrid');
+    char = take(take(char, 'hybrid_second', 'dwarf'), 'dwarf_clan', 'ironfist');
+    expect(after(char, 'dwarf_clan', 'ironfist')).toBe('archetype');
+
+    expect(char.race).toBe('dwarf');
+    expect(char.tags).toContain('blood:orc');
+    expect(char.statBonus.might).toBe(3); // berserker 2 + Ironfist 1
+    expect(isRace('orc')(world(), char) && isRace('dwarf')(world(), char)).toBe(true);
+    // Race odds multiply: an orc's war axe and a dwarf's... whatever dwarves like.
+    const orc = GAME_CONFIG.races.orc!.odds?.archetype?.barbarian ?? 1;
+    const dwarf = GAME_CONFIG.races.dwarf!.odds?.archetype?.barbarian ?? 1;
+    expect(raceFactor('archetype', 'barbarian', char, GAME_CONFIG)).toBeCloseTo(orc * dwarf);
+    expect(heroRace(GAME_CONFIG, char)).toBe('Orc–Dwarf Hybrid');
+  });
+
+  it('a human first half shrinks the second wheel’s Human slice to nothing', () => {
+    const char = take(take(take(soul(), 'ancestry', 'hybrid'), 'hybrid_first', 'human'), 'human_homeland', 'frontier');
+    expect(chance('hybrid_second', 'human', char)).toBe(0);
+  });
+
+  it('always finishes, however deep the detours go', () => {
+    const w = world();
+    const rng = createSeededRng(7);
+    for (let i = 0; i < 400; i++) {
+      let state = startGeneration(GAME_CONFIG, { rng, now: 0 });
+      // Force the rarest doors on the first wheels: hybrid, then demons and angels inside it.
+      const force = ['hybrid', 'demon', 'corrupted', 'celestial', 'ascended', 'construct', 'undead'];
+      while (state.currentStepId !== null) {
+        const step = getStep(GAME_CONFIG, state.currentStepId);
+        const dealt = dealOptions(step, state.character, GAME_CONFIG);
+        const slices = resolveSlices(dealt, w, state.character).filter((s) => !s.locked && s.probability > 0);
+        const forced = rng() < 0.7 ? slices.find((s) => force.includes(s.option.id)) : undefined;
+        if (!forced) {
+          state = spinCurrentStep(state, GAME_CONFIG, w, rng).state;
+          continue;
+        }
+        const char = applyOption(state.character, forced, step.id, GAME_CONFIG);
+        state = { ...state, character: char, currentStepId: resolveNextStep(forced.option.nextStepId, w, char), stepsTaken: state.stepsTaken + 1 };
+      }
+      expect(state.character.race).not.toBeNull();
+      expect(state.character.spinQueue.filter((id) => ['fallen_sin', 'angel_virtue', 'hybrid_second'].includes(id))).toEqual([]);
+    }
   });
 });
 

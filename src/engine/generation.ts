@@ -23,8 +23,8 @@ import { defaultRng, type Rng } from './rng';
 import { rollWeightedOption } from './roll';
 import type { Character, GameConfig, RollResult, WheelOption, WheelStep, World } from './types';
 
-/** Safety valve for graphs that loop (e.g. a "spin again" option). */
-export const MAX_GENERATION_STEPS = 64;
+/** Safety valve for graphs that loop (e.g. a "spin again" option). Nested ancestry detours run long. */
+export const MAX_GENERATION_STEPS = 96;
 
 export interface GenerationState {
   character: Character;

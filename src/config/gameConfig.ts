@@ -104,9 +104,9 @@ import { QUEST_STEPS, QUEST_TRAITS, STORY_FLAG_LABELS } from './quests';
 import { FAME_CONFIG, FAME_TIERS, renown } from './renown';
 import { NAMES } from './names';
 import { WORLD_EVENTS } from './worldEvents';
-import { OTHERWORLDLY_STEPS, OTHERWORLDLY_TRAITS } from './otherworldly';
+import { OTHERWORLDLY_STEPS, OTHERWORLDLY_TRAITS, rejoining } from './otherworldly';
 import { ALL_POWER_TRAITS, POWERS_ROUTE, POWER_STEPS } from './powers';
-import { ANCESTRY, RACES, RACE_TRAITS, RACE_WHEELS, isRace } from './races';
+import { ANCESTRY, RACES, RACE_TRAITS, RACE_WHEELS, isRace, racesOf } from './races';
 import { ASCENSION_WHEELS, STATS_START, STAT_WHEELS, TRAINING_WHEELS, TRAIN_STAT, statTierName } from './stats';
 import { HOOKS, IDENTITIES, METERS, PLACE_KINDS, STAKES_STEPS, STAKES_TRAITS, isConstruct, isVampire } from './stakes';
 
@@ -1530,7 +1530,8 @@ const CAST_WHEEL: CastWheelConfig = {
   slice: (char) => {
     const look = CAST_LOOK[castLookOf(char)] ?? CAST_LOOK.hero!;
     const shade = [...char.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) | 0, 0);
-    const race = char.race === null ? 'Unknown' : ((RACES as Record<string, Race>)[char.race]?.name ?? char.race);
+    const races = racesOf(char).map((id) => (RACES as Record<string, Race>)[id]?.name ?? id);
+    const race = races.length === 0 ? 'Unknown' : races.length === 1 ? races[0]! : `${[...races.slice(1), races[0]].join('–')} Hybrid`;
     const renowned = FAME_TIERS[renown(char)]!.name;
     const what =
       char.status === 'sealed'
@@ -1553,9 +1554,8 @@ const register = (steps: WheelStep[]): Record<string, WheelStep> => Object.fromE
 export const GAME_CONFIG: GameConfig = {
   entryStepId: 'ancestry',
   steps: register([
-    ANCESTRY,
-    ...RACE_WHEELS,
-    ...OTHERWORLDLY_STEPS,
+    // Race wheels end at Archetype, unless a detour (a corrupted mortal's Sin, a hybrid's second half) is waiting.
+    ...[ANCESTRY, ...RACE_WHEELS, ...OTHERWORLDLY_STEPS].map(rejoining),
     ARCHETYPE,
     FATE,
     ABYSS_CALLS,

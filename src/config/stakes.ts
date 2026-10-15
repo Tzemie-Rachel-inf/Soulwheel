@@ -25,10 +25,12 @@ import type { Character, Foe, HookDef, IdentityKit, MeterDef, PlaceKind, StepRou
 import { openPlaces } from '../engine/adventure';
 import { IRON_WILL_SAVES, couldTurnOutlaw, deathCheatReason, fightWheel, gearItem, hasTrait, isUncorruptable, outlawLockReason, sealedSouls } from './common';
 import { POWER_WHEELS } from './powers';
+import { racesOf } from './races';
 
 // ─── Who has what ───────────────────────────────────────────────────────────
 
-const raceIs = (...races: string[]) => (char: Character) => char.race !== null && races.includes(char.race);
+/** A hybrid counts as both of their races. */
+const raceIs = (...races: string[]) => (char: Character) => racesOf(char).some((r) => races.includes(r));
 export const isVampire = raceIs('vampire');
 export const isWerewolf = raceIs('werewolf');
 export const isUndead = raceIs('skeleton', 'lich', 'vampire');

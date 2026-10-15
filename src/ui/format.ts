@@ -1,4 +1,5 @@
 /** Display helpers. Pure functions, so they're easy to test and reuse. */
+import { racesOf } from '../engine/character';
 import type { Character, CharacterRole, ExitStatus, GameConfig, StatKey, WheelOption } from '../engine/types';
 
 export const STAT_LABELS: Record<StatKey, string> = {
@@ -61,7 +62,7 @@ function describeStory(option: WheelOption, config: GameConfig): string[] {
 /** A character's name, or, before their last wheel names them, what they are: "An unnamed goblin". */
 export function displayName(char: Character, config: GameConfig): string {
   if (char.name) return char.name;
-  const race = raceName(config, char.race);
+  const race = heroRace(config, char);
   return race ? `An unnamed ${race.toLowerCase()}` : 'An unnamed soul';
 }
 
@@ -76,6 +77,14 @@ export function fullName(char: Character, config: GameConfig): string {
 export function raceName(config: GameConfig, raceId: string | null): string | null {
   if (raceId === null) return null;
   return config.races[raceId]?.name ?? humanizeKey(raceId);
+}
+
+/** What a character is: their race's name, or both of a hybrid's ("Wood Elf–Balor Hybrid"). */
+export function heroRace(config: GameConfig, char: Pick<Character, 'race' | 'tags'>): string | null {
+  const races = racesOf(char);
+  if (races.length < 2) return raceName(config, char.race);
+  // The first bloodline first: the race they were before their second ancestry.
+  return `${races.slice(1).concat(races[0]!).map((id) => raceName(config, id)).join('–')} Hybrid`;
 }
 
 /**

@@ -567,10 +567,11 @@ export interface WheelOption {
   rarity?: Rarity;
   /**
    * A per-character twist on the option, applied when it is dealt (before race, luck and
-   * fights): e.g. Mischief, whose rarity changes from soul to soul. Must be pure: the same
+   * fights): e.g. Mischief, whose rarity changes from soul to soul, or a hybrid's second
+   * ancestry, which keeps the first race as a bloodline tag. Must be pure: the same
    * character always gets the same answer.
    */
-  vary?: (char: Character) => Partial<Pick<WheelOption, 'baseWeight' | 'rarity'>>;
+  vary?: (char: Character) => Partial<Pick<WheelOption, 'baseWeight' | 'rarity' | 'grantTags'>>;
 
   // ── Effects on the character ──
   /** Added to the character's stats right away. Negative values allowed; stats floor at 0. */

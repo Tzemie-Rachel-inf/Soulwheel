@@ -16,7 +16,7 @@ import { findCharacter } from '../engine/world';
 import type { useAdventure } from '../state/useAdventure';
 import { FameMeter } from './FameMeter';
 import { Epitaph } from './Headstone';
-import { formatPercent, fullName, lifeOf, ordinal, raceName, roleLabel, signed } from './format';
+import { formatPercent, fullName, lifeOf, ordinal, heroRace, roleLabel, signed } from './format';
 import { OddsList } from './OddsList';
 import { enter, returnToWheel } from './motion';
 import { ChoicePanel, QuestPanel, QuestTale } from './QuestPanel';
@@ -193,7 +193,7 @@ function CastBanner({ config, cast }: { config: GameConfig; cast: Character }) {
 }
 
 function castDescription(config: GameConfig, cast: Character): string {
-  const race = raceName(config, cast.race);
+  const race = heroRace(config, cast);
   const role = roleLabel(cast);
   const who = race ? `${race}, ${role.charAt(0).toLowerCase()}${role.slice(1)}` : role;
   const renown = fameStanding(config.fame.tiers, cast.fame).tier.name;
@@ -289,7 +289,7 @@ function HeroHome({ config, world, hero, error, onEmbark, onCreateHero }: HeroHo
             <p className="truncate font-display text-2xl leading-tight text-candle">{hero.name}</p>
             {hero.title && <p className="truncate text-sm text-gilt-bright">{hero.title}</p>}
             <p className="text-sm text-ash">
-              {[raceName(config, hero.race), roleLabel(hero), `${calculatePowerRating(hero)} CP`].filter(Boolean).join(' · ')}
+              {[heroRace(config, hero), roleLabel(hero), `${calculatePowerRating(hero)} CP`].filter(Boolean).join(' · ')}
             </p>
             <p className="mt-1 text-sm text-vellum">
               {done === 0 ? 'Never left home.' : `${done} adventure${done === 1 ? '' : 's'} behind them.`}

@@ -90,6 +90,17 @@ export function resolveSlices(
  *
  * @throws EngineError('NO_ELIGIBLE_OPTIONS') when every option is locked or weightless.
  */
+/** A dev override: the option id the next roll lands on, if it can (see `forceNextRoll`). */
+let forcedNext: string | null = null;
+
+/**
+ * Developer tools only: make the next roll land on the option with this id, if that slice is
+ * open on the wheel being rolled. One-shot: it clears itself on the next roll either way.
+ */
+export function forceNextRoll(optionId: string | null): void {
+  forcedNext = optionId;
+}
+
 export function rollWeightedOption(
   options: readonly WheelOption[],
   world: World,
@@ -108,6 +119,10 @@ export function rollWeightedOption(
   }
 
   const draw = rng();
+  const forced = forcedNext === null ? undefined : slices.find((s) => s.option.id === forcedNext && s.effectiveWeight > 0);
+  forcedNext = null;
+  if (forced) return { slices, winner: forced, draw };
+
   let remaining = draw * total;
   let winner: ResolvedSlice | undefined;
 

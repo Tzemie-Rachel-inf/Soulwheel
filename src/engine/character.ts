@@ -11,6 +11,15 @@ import {
   type WheelOption,
 } from './types';
 
+/** The tag a hybrid carries for the race they were before their second ancestry: `blood:wood_elf`. */
+export const BLOOD_TAG = 'blood:';
+
+/** Every race a character is: their own first, plus any a hybrid carries in their blood. */
+export function racesOf(char: Pick<Character, 'race' | 'tags'>): string[] {
+  const blood = char.tags.filter((tag) => tag.startsWith(BLOOD_TAG)).map((tag) => tag.slice(BLOOD_TAG.length));
+  return char.race === null ? blood : [char.race, ...blood.filter((r) => r !== char.race)];
+}
+
 /** Upper bound for `Character.weaponTier`. Tier 10 is worth 250 CP. */
 export const MAX_WEAPON_TIER = 10;
 /** Upper bound for `Character.armorTier`. Tier 10 is worth 200 CP. */

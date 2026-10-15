@@ -7,10 +7,16 @@
  *                                    ├─ One of the Races ──▶ which ────┤
  *                                    └─ War ──▶ strategic or brutal ───┴──▶ Archetype
  *   Demon ──▶ Born or Made? ─┬─ natural ──▶ Sin (sets the race: lust ──▶ Succubus or Incubus) ──▶ Archetype
- *                            └─ corrupted ──▶ from which race? ──▶ Sin ─────────────────────────▶ Archetype
+ *                            └─ corrupted ──▶ Ancestry again (no Demon) ──▶ that race's wheels ──▶ Sin ──▶ Archetype
  *   Angel ──▶ Born or Raised? ─┬─ natural ──▶ which door of heaven ──▶ Virtue ──▶ Archetype
- *                              └─ ascended ──▶ from which race? ──▶ Virtue ────▶ Archetype
- *   Construct ──▶ what kind ──(undead ──▶ resurrected from which race?)──▶ Archetype
+ *                              └─ ascended ──▶ Ancestry again (no Angel) ──▶ that race's wheels ──▶ Virtue ──▶ Archetype
+ *   Construct ──▶ what kind ──(undead ──▶ Ancestry again (no Construct) ──▶ that race's wheels)──▶ Archetype
+ *   Hybrid ──▶ Ancestry (no Hybrid) ──▶ its wheels ──▶ Ancestry again ──▶ its wheels ──▶ Archetype
+ *
+ * "Ancestry again" is the very wheel every soul starts on, so everything stacks: a corrupted
+ * elf rolls their elven line, a hybrid gets both races' wheels. The wheel that comes after the
+ * detour (Sin, Virtue, the hybrid's second Ancestry) waits in the spin queue; whenever a race's
+ * wheels would end at Archetype, `REJOIN` sends them back to the newest such wheel first.
  *
  * Every domain belongs to one god at a time (`claimSingleton`). Demons owe a Corrupted
  * power spin, angels a Blessed one, gods three Blessed (see powers.ts), and the Abyss
@@ -18,7 +24,7 @@
  * Natural demons and angels are stronger than the mortals corrupted or raised into them.
  */
 import type { Character, Rarity, StepRoute, Trait, WheelOption, WheelStep, World } from '../engine/types';
-import { ARCHETYPE_STEP, RACES, type RaceId } from './races';
+import { ANCESTRY_OPTIONS, ARCHETYPE_STEP, BLOOD_TAG, RACES, type RaceId } from './races';
 
 // ─── Traits ─────────────────────────────────────────────────────────────────
 
@@ -53,59 +59,70 @@ function soulHash(char: Character): number {
   return Math.abs(h);
 }
 
-// ─── Mirrors of the race wheel ──────────────────────────────────────────────
-// "Roll the race again": every race at an equal chance.
+// ─── Ancestry, again ────────────────────────────────────────────────────────
 
-const LOOK: Record<string, { color: string; icon: string }> = {
-  human: { color: '#c2874f', icon: 'User' },
-  elf: { color: '#2f9e7a', icon: 'Leaf' },
-  dwarf: { color: '#9b4d32', icon: 'Pickaxe' },
-  orc: { color: '#5d7d24', icon: 'BicepsFlexed' },
-  halfling: { color: '#4f86b8', icon: 'Clover' },
-  dragonborn: { color: '#b8323a', icon: 'Egg' },
-  gnome: { color: '#b06ab8', icon: 'Cog' },
-  goblin: { color: '#6b7a3a', icon: 'VenetianMask' },
-  kobold: { color: '#a0603a', icon: 'Rat' },
-  lizardfolk: { color: '#3e7a5a', icon: 'Turtle' },
-  skeleton: { color: '#c8c2b0', icon: 'Bone' },
-  ogre: { color: '#8a7a52', icon: 'Beef' },
-  minotaur: { color: '#7a3e2e', icon: 'Axe' },
-  werewolf: { color: '#5a6478', icon: 'MoonStar' },
-  vampire: { color: '#8a1c2e', icon: 'Droplets' },
+/** Wheels a detour through Ancestry comes back to, once that race's own wheels are done. */
+const RETURN_STEPS = ['fallen_sin', 'angel_virtue', 'hybrid_second'];
+
+/**
+ * Every race wheel ends at Archetype; this sends the character back to the newest wheel a
+ * detour left waiting in their spin queue first (innermost detour first), else on to Archetype.
+ */
+export const REJOIN: StepRoute = {
+  among: [ARCHETYPE_STEP, ...RETURN_STEPS],
+  pick: (_world, char) => char.spinQueue.findLast((id) => RETURN_STEPS.includes(id)) ?? ARCHETYPE_STEP,
 };
 
-const MORTALS: RaceId[] = ['human', 'elf', 'dwarf', 'orc', 'halfling', 'dragonborn', 'gnome'];
-const MONSTERS: RaceId[] = ['goblin', 'kobold', 'lizardfolk', 'skeleton', 'ogre', 'minotaur', 'werewolf', 'vampire'];
+/** A creation wheel whose ways to Archetype (plain or routed) go through `REJOIN` first. */
+export function rejoining(step: WheelStep): WheelStep {
+  const reroute = (next: WheelOption['nextStepId']): WheelOption['nextStepId'] => {
+    if (next === ARCHETYPE_STEP) return REJOIN;
+    if (next === null || typeof next === 'string' || !next.among.includes(ARCHETYPE_STEP)) return next;
+    return {
+      among: [...new Set([...next.among, ...REJOIN.among])],
+      pick: (world, char) => {
+        const picked = next.pick(world, char);
+        return picked === ARCHETYPE_STEP ? REJOIN.pick(world, char) : picked;
+      },
+    };
+  };
+  return { ...step, options: step.options.map((o) => ({ ...o, nextStepId: reroute(o.nextStepId) })) };
+}
 
-/** One equal-weight option per race, each setting that race. `extra` options (rarer) go last. */
-function raceMirror(
+/** Origins that can be taken only once per soul: the tag each leaves behind. */
+const ONCE_ONLY: Record<string, { tag: string; reason: string }> = {
+  demon: { tag: 'fiend', reason: 'Already a demon' },
+  celestial: { tag: 'angel', reason: 'Already an angel' },
+  construct: { tag: 'construct', reason: 'Already a construct' },
+  god: { tag: 'divine', reason: 'Already a god' },
+  hybrid: { tag: 'hybrid', reason: 'Already two bloodlines' },
+};
+
+/**
+ * The Ancestry wheel again, without the origin that sent them here (`without`). Origins the
+ * soul already took are locked, so detours can nest but never loop. `extra` adds per-slice
+ * twists, such as the Fallen Angel's epithet.
+ */
+function ancestryMirror(
   id: string,
   title: string,
   subtitle: string,
-  races: RaceId[],
-  shared: Partial<WheelOption> & Pick<WheelOption, 'nextStepId'>,
-  extra: WheelOption[] = [],
+  without: string,
+  extra: Record<string, Partial<WheelOption>> = {},
 ): WheelStep {
   return {
     id,
     title,
     subtitle,
-    options: [
-      ...races.map(
-        (race): WheelOption => ({
-          ...shared,
-          id: race,
-          label: RACES[race].name,
-          description: RACES[race].description,
-          baseWeight: 10,
-          rarity: 'common',
-          setRace: race,
-          color: LOOK[race]?.color,
-          icon: LOOK[race]?.icon,
-        }),
-      ),
-      ...extra.map((o) => ({ ...shared, ...o })),
-    ],
+    repeats: true, // a soul can pass through Ancestry more than once; the locks keep it finite
+    options: ANCESTRY_OPTIONS.filter((o) => o.id !== without).map((o) => {
+      const once = ONCE_ONLY[o.id];
+      return {
+        ...o,
+        ...(once && { condition: (_world: World, char: Character) => !char.tags.includes(once.tag), lockedReason: once.reason }),
+        ...extra[o.id],
+      };
+    }),
   };
 }
 
@@ -312,7 +329,7 @@ const FIEND_ORIGIN: WheelStep = {
   subtitle: 'Half the Abyss was born there. The other half fell in.',
   options: [
     { id: 'natural', label: 'Born of the Abyss', description: 'A true demon: stronger than any mortal it corrupts.', baseWeight: 50, rarity: 'common', grantTraits: ['true_demon'], nextStepId: 'demon_sin', color: '#9a1c2e', icon: 'Flame' },
-    { id: 'corrupted', label: 'A Corrupted Mortal', description: 'Once something else. Which race did the Abyss take?', baseWeight: 50, rarity: 'common', grantTags: ['corrupted'], nextStepId: 'corrupted_from', color: '#5a2a3a', icon: 'UserX' },
+    { id: 'corrupted', label: 'A Corrupted Mortal', description: 'Once something else. Spin Ancestry again: whatever they were, they keep, and the Abyss adds a sin.', baseWeight: 50, rarity: 'common', grantTags: ['corrupted'], grantTraits: ['demonic_corruption'], queueSpins: { fallen_sin: 1 }, nextStepId: 'corrupted_from', color: '#5a2a3a', icon: 'UserX' },
     { id: 'prince_of_hell', label: 'A Prince of Hell', description: 'Not born in the Abyss: born to rule part of it.', baseWeight: 3, rarity: 'legendary', setRace: 'archfiend', grantTraits: ['true_demon', 'abyss_heir'], statBonus: { might: 2, arcana: 2 }, epithet: { text: 'Prince of Hell', priority: 86 }, nextStepId: ARCHETYPE_STEP, color: '#ffb84d', icon: 'Crown' },
   ],
 };
@@ -354,23 +371,17 @@ const LUST_FORM: WheelStep = {
   ],
 };
 
-const CORRUPTED_FROM = raceMirror(
-  'corrupted_from',
-  'Corrupted From Which Race?',
-  'Before the Abyss took them, they were something else.',
-  [...MORTALS, ...MONSTERS],
-  { grantTraits: ['demonic_corruption'], nextStepId: 'fallen_sin' },
-  [
-    { id: 'fallen_angel', label: 'An Angel', description: 'They fell all the way down.', baseWeight: 2, rarity: 'epic', setRace: 'celestial', epithet: { text: 'the Fallen Angel', priority: 75 }, nextStepId: 'fallen_sin', color: '#6e5a7a', icon: 'Feather' },
-    { id: 'fallen_god', label: 'A God', description: 'Even gods can be dragged down.', baseWeight: 0.6, rarity: 'legendary', setRace: 'god', epithet: { text: 'the Fallen God', priority: 92 }, nextStepId: 'fallen_sin', color: '#8a6a2a', icon: 'Sun' },
-  ],
-);
+const CORRUPTED_FROM = ancestryMirror('corrupted_from', 'What Did the Abyss Take?', 'The Wheel of Ancestry, once more. Whatever they were, they still are.', 'demon', {
+  celestial: { epithet: { text: 'the Fallen Angel', priority: 75 } },
+  god: { epithet: { text: 'the Fallen God', priority: 92 } },
+});
 
 /** A corrupted mortal's sin: the same seven, but they keep the race they were. */
 const FALLEN_SIN: WheelStep = {
   id: 'fallen_sin',
   title: 'Which Sin Took You?',
   subtitle: 'Every fall starts with one.',
+  repeats: true, // waits in the spin queue (see REJOIN)
   options: [...SINS.map(
     (sin): WheelOption => ({
       id: sin.id,
@@ -399,19 +410,14 @@ const ANGEL_ORIGIN: WheelStep = {
   subtitle: 'Some angels were made in heaven. Some earned their way there.',
   options: [
     { id: 'natural', label: 'A True Angel', description: 'Born of light: stronger than any mortal raised to it.', baseWeight: 50, rarity: 'common', setRace: 'celestial', grantTraits: ['born_of_light', 'celestial_grace'], nextStepId: 'celestial_origin', color: '#f0e6c8', icon: 'Sun' },
-    { id: 'ascended', label: 'An Ascended Mortal', description: 'Once mortal. Which race did the light lift up?', baseWeight: 50, rarity: 'common', grantTags: ['ascended'], nextStepId: 'ascended_from', color: '#c9b27a', icon: 'Sunrise' },
+    { id: 'ascended', label: 'An Ascended Mortal', description: 'Once something else. Spin Ancestry again: whatever they were, they keep, and the light adds a virtue.', baseWeight: 50, rarity: 'common', grantTags: ['ascended'], grantTraits: ['ascended_soul'], queueSpins: { angel_virtue: 1 }, nextStepId: 'ascended_from', color: '#c9b27a', icon: 'Sunrise' },
     { id: 'archangel', label: 'An Archangel', description: 'One of the first. They remember the world being made.', baseWeight: 3, rarity: 'legendary', setRace: 'celestial', grantTraits: ['born_of_light', 'celestial_grace', 'divine_favor'], epithet: { text: 'the Archangel', priority: 88 }, nextStepId: 'celestial_origin', color: '#ffe08a', icon: 'Sun' },
   ],
 };
 
-const ASCENDED_FROM = raceMirror(
-  'ascended_from',
-  'Ascended From Which Race?',
-  'Before the light lifted them, they were something else.',
-  [...MORTALS, ...MONSTERS],
-  { grantTraits: ['ascended_soul'], nextStepId: 'angel_virtue' },
-  [{ id: 'redeemed_demon', label: 'A Demon', description: 'The rarest redemption of all.', baseWeight: 2, rarity: 'epic', setRace: 'demon', epithet: { text: 'the Redeemed', priority: 75 }, nextStepId: 'angel_virtue', color: '#b86a6a', icon: 'Flame' }],
-);
+const ASCENDED_FROM = ancestryMirror('ascended_from', 'What Did the Light Lift Up?', 'The Wheel of Ancestry, once more. Whatever they were, they still are.', 'celestial', {
+  demon: { epithet: { text: 'the Redeemed', priority: 75 } },
+});
 
 const VIRTUES: { id: string; name: string; bonus: WheelOption['statBonus']; luck?: number; color: string; icon: string }[] = [
   { id: 'chastity', name: 'Purity', bonus: { arcana: 2 }, color: '#f0f0e0', icon: 'Sparkle' },
@@ -427,6 +433,7 @@ const ANGEL_VIRTUE: WheelStep = {
   id: 'angel_virtue',
   title: 'Which Virtue Is Yours?',
   subtitle: 'Every angel carries one above all others.',
+  repeats: true, // waits in the spin queue (see REJOIN)
   options: [...VIRTUES.map(
     (v): WheelOption => ({
       id: v.id,
@@ -453,7 +460,7 @@ const CONSTRUCT_TYPE: WheelStep = {
   title: 'What Kind of Construct?',
   subtitle: 'Gears, runes, stone, or something stitched together.',
   options: [
-    { id: 'undead', label: 'Undead Construct', description: 'Stitched from the dead and wound up again. But dead what?', baseWeight: 30, rarity: 'common', grantTags: ['undead'], nextStepId: 'resurrected_from', color: '#6e7a5a', icon: 'Bone' },
+    { id: 'undead', label: 'Undead Construct', description: 'Stitched from the dead and wound up again. Spin Ancestry again: whatever they were, they keep.', baseWeight: 30, rarity: 'common', grantTags: ['undead'], grantTraits: ['reanimated'], epithet: { text: 'the Reanimated', priority: 25 }, nextStepId: 'resurrected_from', color: '#6e7a5a', icon: 'Bone' },
     { id: 'crazy_experiment', label: 'Crazy Experiment', description: 'Lightning, a laboratory, and a very bad idea that worked.', baseWeight: 14, rarity: 'uncommon', setRace: 'construct', grantTraits: ['unstable_experiment'], luckDelta: -0.25, epithet: { text: 'the Experiment', priority: 30 }, nextStepId: ARCHETYPE_STEP, color: '#7ac46a', icon: 'FlaskConical' },
     { id: 'magical_golem', label: 'Magical Golem', description: 'Stone, a rune, and a purpose.', baseWeight: 14, rarity: 'uncommon', setRace: 'construct', grantTraits: ['golem_core'], epithet: { text: 'the Golem', priority: 30 }, nextStepId: ARCHETYPE_STEP, color: '#8a7ab8', icon: 'Gem' },
     { id: 'dwarven_masterpiece', label: 'Dwarven Masterpiece', description: 'A lifetime of a master’s work, in brass and steel.', baseWeight: 4, rarity: 'epic', setRace: 'construct', grantTraits: ['masterwork_frame'], epithet: { text: 'the Dwarven Masterpiece', priority: 55 }, nextStepId: ARCHETYPE_STEP, color: '#b8862e', icon: 'Cog' },
@@ -461,14 +468,34 @@ const CONSTRUCT_TYPE: WheelStep = {
   ],
 };
 
-const RESURRECTED_FROM = raceMirror(
-  'resurrected_from',
-  'Resurrected From Which Race?',
-  'The body was someone, once.',
-  [...MORTALS, ...MONSTERS.filter((r) => r !== 'skeleton' && r !== 'vampire')],
-  { grantTraits: ['reanimated'], epithet: { text: 'the Reanimated', priority: 25 }, nextStepId: ARCHETYPE_STEP },
-  [{ id: 'dead_god', label: 'A Dead God', description: 'Somebody found a god’s body, and wound it up again.', baseWeight: 0.6, rarity: 'legendary', setRace: 'god', grantTraits: ['reanimated'], epithet: { text: 'the Risen God', priority: 90 }, nextStepId: ARCHETYPE_STEP, color: '#ffe08a', icon: 'Sun' }],
-);
+const RESURRECTED_FROM = ancestryMirror('resurrected_from', 'Whose Body Was It?', 'The Wheel of Ancestry, once more. Whatever they were, they still are.', 'construct', {
+  god: { epithet: { text: 'the Risen God', priority: 90 } },
+});
+
+// ─── Hybrids ────────────────────────────────────────────────────────────────
+
+const HYBRID_FIRST = ancestryMirror('hybrid_first', 'The First Bloodline', 'Half of them comes from here. Spin Ancestry.', 'hybrid');
+
+/** Which ancestry a hybrid's first half rolled. */
+const firstHalf = (char: Character) => char.history.find((roll) => roll.stepId === 'hybrid_first')?.optionId;
+
+/**
+ * The second half. Spinning it keeps the first race as a bloodline (`blood:<race>`): odds and
+ * race checks count both. The first half's ancestry is locked (Human, the wheel's always-open
+ * slice, just shrinks to nothing instead).
+ */
+const HYBRID_SECOND = ancestryMirror('hybrid_second', 'The Second Bloodline', 'And the other half? Spin Ancestry again.', 'hybrid');
+HYBRID_SECOND.options = HYBRID_SECOND.options.map((o): WheelOption => {
+  const blood = (char: Character) => (char.race === null ? {} : { grantTags: [...(o.grantTags ?? []), `${BLOOD_TAG}${char.race}`] });
+  if (o.id === 'human') return { ...o, vary: (char) => ({ ...blood(char), ...(firstHalf(char) === 'human' && { baseWeight: 0 }) }) };
+  return {
+    ...o,
+    condition: (world, char) => firstHalf(char) !== o.id && (o.condition?.(world, char) ?? true),
+    lockedReason: (world, char) =>
+      firstHalf(char) === o.id ? 'Already half of them' : typeof o.lockedReason === 'function' ? o.lockedReason(world, char) : (o.lockedReason ?? 'Locked'),
+    vary: blood,
+  };
+});
 
 export const OTHERWORLDLY_STEPS: WheelStep[] = [
   GOD_DOMAIN,
@@ -485,4 +512,6 @@ export const OTHERWORLDLY_STEPS: WheelStep[] = [
   ANGEL_VIRTUE,
   CONSTRUCT_TYPE,
   RESURRECTED_FROM,
+  HYBRID_FIRST,
+  HYBRID_SECOND,
 ];
