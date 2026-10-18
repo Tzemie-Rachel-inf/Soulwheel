@@ -132,6 +132,7 @@ function powerWheel(school: School): WheelStep {
           rarity: p.rarity,
           grantTraits: [p.id],
           grantTags: ['power'],
+          ...(school === 'blessed' && { holy: true }),
           ...(p.luckDelta ? { luckDelta: p.luckDelta } : {}),
           ...(ARCANA_FAVOURED[p.rarity ?? 'common'] ? { statScaling: { arcana: ARCANA_FAVOURED[p.rarity ?? 'common'] } } : {}),
           ...(p.epithet && { epithet: p.epithet }),

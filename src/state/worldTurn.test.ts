@@ -84,15 +84,17 @@ describe('the world’s own turn', () => {
           if (character.role === 'hero') soul = character;
         }
         w = commitCharacter(w, soul);
-        for (let n = 0; playerHero(w) && n < 25; n++) {
+        for (let n = 0; playerHero(w) && n < 60; n++) {
           const before = playerHero(w)!;
           const { state } = rollFullAdventure(GAME_CONFIG, w, before, rng);
           w = worldTurn(chronicleAdventure(w, completeAdventure(w, state), before.id, GAME_CONFIG), GAME_CONFIG, before, rng);
         }
+        // A hero still on the road after 60 adventures (a Wise one, now and then) holds the world: no next life.
+        if (playerHero(w)) break;
       }
       expect(w.season).toBeGreaterThan(4);
       expect(w.chronicle.every((e, i, all) => i === 0 || e.season >= all[i - 1]!.season)).toBe(true);
       expect(worldHeroes(w).length).toBeLessThanOrEqual(MAX_WORLD_HEROES);
     }
-  });
+  }, 20_000); // every fight is a battle now: long lives take a few seconds under a full run
 });

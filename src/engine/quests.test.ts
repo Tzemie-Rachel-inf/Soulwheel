@@ -74,7 +74,8 @@ describe('taking a quest', () => {
     const hero = soul(2);
     const world = worldOf(0, hero);
     const rng = createSeededRng(4);
-    for (let i = 0; i < 40; i++) {
+    // Battles draw on the same stream, so give the road room to offer a quest.
+    for (let i = 0; i < 200; i++) {
       const { state, spins } = rollFullAdventure(GAME_CONFIG, world, hero, rng);
       if (!state.character.story || state.character.status === 'fallen') continue;
       expect(spins.some((s) => s.step.id === 'quest_finale')).toBe(true);
@@ -84,7 +85,7 @@ describe('taking a quest', () => {
       expect(back.adventures.at(-1)?.quest).toMatchObject({ title: state.character.story.title, log: state.character.story.log });
       return;
     }
-    throw new Error('no quest in 40 adventures');
+    throw new Error('no quest in 200 adventures');
   });
 });
 
@@ -207,7 +208,9 @@ describe('a finale shaped by the journey', () => {
     expect(led.power).toBe(plain.power + 150);
     const won = land(at(hero, 'q_fin_siege_fight'), worldOf(0, hero), 'victory');
     expect(won.character.story?.rival?.fate).toBe('Stood against Soul 13 at the end of The Test, and lost');
-    expect(won.currentStepId).toBeNull();
+    // The road would end here; first, the spoils of the siege.
+    expect(won.currentStepId).toBe('spoils:q_fin_siege_fight');
+    expect(won.spoils?.then).toBeNull();
   });
 
   it('opens choices from earlier decisions: the relic, allies, mercy', () => {

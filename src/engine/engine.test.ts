@@ -1,3 +1,4 @@
+import { plainArchetypes, plainItem } from './testConfig';
 import { describe, expect, it } from 'vitest';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { MIN_POSITIONS, STATS_START, profileRace } from '../config/stats';
@@ -16,6 +17,7 @@ import {
   calculatePowerRating,
   calculateWinProbability,
   canAdventure,
+  COMMON_FACTOR,
   dealOptions,
   fightOdds,
   resolveNextStep,
@@ -199,10 +201,10 @@ describe('rollWeightedOption', () => {
 // ─── calculatePowerRating ───────────────────────────────────────────────────
 
 describe('calculatePowerRating', () => {
-  it('follows CP = stats + weaponTier × 25 + armorTier × 20 + traits', () => {
+  it('follows CP = stats + weapon power × 25 + armour power × 20 + traits', () => {
     const char: Character = {
       ...freshChar(),
-      weaponTier: 3,
+      weapon: plainItem('weapon', 3),
       traits: [
         { id: 'a', name: 'A', description: '', power: 40 },
         { id: 'b', name: 'B', description: '', power: -10 },
@@ -210,15 +212,18 @@ describe('calculatePowerRating', () => {
     };
     expect(getPowerBreakdown(char)).toEqual({ stats: 50, weapon: 75, weaponScale: 1, armor: 0, armorScale: 1, traits: 30, multiplier: 1, total: 155 });
     expect(calculatePowerRating(char)).toBe(155);
-    expect(calculatePowerRating({ ...char, armorTier: 2 })).toBe(195);
+    expect(calculatePowerRating({ ...char, armor: plainItem('armor', 2) })).toBe(195);
   });
 
-  it('scales armour with Vitality, as a weapon scales with Might or Agility', () => {
+  it('scales armour with the stat it is worn with, as a weapon scales with the stat it is wielded with', () => {
     const base = freshChar();
-    const tough: Character = { ...base, armorTier: 4, stats: { ...base.stats, vitality: 20 } };
+    const tough: Character = { ...base, armor: plainItem('armor', 4), stats: { ...base.stats, vitality: 20 } };
     expect(getPowerBreakdown(tough)).toMatchObject({ armor: 120, armorScale: 1.5 }); // 4 × 20 × (1 + 0.05 × 10)
-    const frail: Character = { ...base, armorTier: 4, stats: { ...base.stats, vitality: 0 } };
-    expect(getPowerBreakdown(frail).armor).toBe(40); // never under ×0.5
+    const frail: Character = { ...base, armor: plainItem('armor', 4), stats: { ...base.stats, vitality: 0 } };
+    expect(getPowerBreakdown(frail).armor).toBe(16); // never under ×0.2
+    // Leathers are worn with Agility: a nimble wearer gets more from them than a tough one.
+    const nimble: Character = { ...base, armor: plainItem('armor', 4, 'agility'), stats: { ...base.stats, agility: 20, vitality: 4 } };
+    expect(getPowerBreakdown(nimble)).toMatchObject({ armor: 120, armorScale: 1.5 });
   });
 
   it('multiplies everything by trait multipliers, a god of Space ×10', () => {
@@ -253,12 +258,15 @@ describe('generation loop', () => {
     const powerWheels = ['blessed_powers', 'corrupted_powers', 'arcane_powers', 'power_mastery'];
     for (let i = 0; i < 500; i++) {
       const { character } = rollFullCharacter(GAME_CONFIG, world, rng, { now: 0 });
-      const path = character.history.map((h) => h.stepId);
+      // A Gambler's coins come between the wheels; they are not part of the graph.
+      const path = character.history.map((h) => h.stepId).filter((id) => id !== 'gamble');
       expect(path[0]).toBe('ancestry');
       const fateAt = path.indexOf('fate');
       const personalityAt = path.indexOf('personality');
       expect(fateAt).toBeGreaterThan(2); // every race has at least one wheel of its own
-      expect(path[fateAt - 1]).toBe('archetype'); // right after the race's wheels
+      // Right after the race's wheels (a Vessel learns what lives in them first).
+      const vessel = character.archetype === 'vessel' ? ['vessel_of', 'vessel_assimilation'] : [];
+      expect(path.slice(fateAt - 1 - vessel.length, fateAt)).toEqual(['archetype', ...vessel]);
       // Only monsters, the cursed, demons and angels hear the Abyss.
       const called = path.includes('abyss_calls');
       expect(path.slice(fateAt + 1, personalityAt)).toEqual(called ? ['abyss_calls'] : []);
@@ -270,11 +278,11 @@ describe('generation loop', () => {
         if (id.startsWith('ascend_')) expect(path[i - 1]).toBe(`stat_${id.slice('ascend_'.length)}_${statRace}`);
       });
       const climbs = path.filter((id) => !id.startsWith('ascend_'));
-      expect(climbs.slice(personalityAt + 1, personalityAt + 6)).toEqual(
-        ['might', 'agility', 'intellect', 'arcana', 'vitality'].map((stat) => `stat_${stat}_${statRace}`),
-      );
+      // A stat the archetype holds fixed (a Martial soul's Arcana) has no wheel.
+      const stats = ['might', 'agility', 'intellect', 'arcana', 'vitality'].filter((stat) => character.rules?.fixedStats?.[stat as 'arcana'] === undefined);
+      expect(climbs.slice(personalityAt + 1, personalityAt + 1 + stats.length)).toEqual(stats.map((stat) => `stat_${stat}_${statRace}`));
       // Then a calling, then every owed power spin.
-      const rest = climbs.slice(personalityAt + 6);
+      const rest = climbs.slice(personalityAt + 1 + stats.length);
       const calling = rest.filter((id) => !powerWheels.includes(id)).join('>');
       expect(calling).toBe(
         character.role === 'demonLord' // a route sends Demon Lords to the Abyss
@@ -690,7 +698,7 @@ describe('adventures', () => {
   });
 
   it('opens Destiny to the Renowned and the Legendary Challenges to the Famous', () => {
-    const { world, hero } = worldWithHero(64);
+    const { world, hero } = worldWithHero(65);
     const crossroads = getStep(GAME_CONFIG, 'crossroads');
     const lock = (c: Character, id: string) => resolveSlices(dealOptions(crossroads, c, GAME_CONFIG), world, c).find((s) => s.option.id === id)!;
     expect(lock(hero, 'destiny').locked).toBe(true);
@@ -723,14 +731,16 @@ describe('adventures', () => {
     expect(after.graveyard.at(-1)?.history).toEqual(hero.history);
   });
 
-  it('lets Iron Will cheat death', () => {
+  it('lets a phylactery cheat death, but not Iron Will', () => {
     const { world, hero } = worldWithHero(68);
-    const stubborn = { ...hero, traits: [...hero.traits, GAME_CONFIG.traits['iron_will']!] };
-    const slain = resolveSlices(dealOptions(troll, stubborn, GAME_CONFIG), world, stubborn).find((s) => s.option.id === 'slain');
+    const lich = { ...hero, traits: [...hero.traits, GAME_CONFIG.traits['phylactery_spark']!] };
+    const slain = resolveSlices(dealOptions(troll, lich, GAME_CONFIG), world, lich).find((s) => s.option.id === 'slain');
     expect(slain?.locked).toBe(true);
-    expect(slain?.lockReason).toBe('Iron Will: they get back up. Every time.');
+    expect(slain?.lockReason).toBe('Phylactery: their soul is kept elsewhere. They reform.');
     expect(slain?.effectiveWeight).toBe(0);
     expect(slain?.option.baseWeight).toBeGreaterThan(0); // still drawn at the size it would have had
+    const stubborn = { ...hero, traits: [...hero.traits, GAME_CONFIG.traits['iron_will']!] };
+    expect(resolveSlices(dealOptions(troll, stubborn, GAME_CONFIG), world, stubborn).find((s) => s.option.id === 'slain')?.locked).toBe(false);
   });
 
   it('retires a hero to the hall of fame when Destiny calls, with the story written down', () => {
@@ -793,16 +803,20 @@ describe('adventures', () => {
   it('weighs Combat Power against the foe’s power', () => {
     const even: Character = { ...freshChar(), stats: { might: 60, agility: 60, intellect: 60, arcana: 60, vitality: 60 } };
     expect(calculatePowerRating(even)).toBe(300); // the Bridge Troll's power
-    expect(fightOdds(troll, even)).toBe(0.5);
-    const slices = resolveSlices(dealOptions(troll, even, GAME_CONFIG), freshWorld(), even);
+    // Bare hands are bludgeoning, which the troll resists (×0.75); at even matchups it is CP against CP.
+    expect(fightOdds(troll, even)).toBeCloseTo(225 / 525, 9);
+    const plain = { ...troll, foe: { name: troll.foe!.name, power: troll.foe!.power } };
+    expect(fightOdds(plain, even)).toBe(0.5);
+    const slices = resolveSlices(dealOptions(plain, even, GAME_CONFIG), freshWorld(), even);
     const win = slices.filter((s) => s.option.fight === 'win').reduce((sum, s) => sum + s.probability, 0);
     expect(win).toBeCloseTo(0.5, 9);
     expect(fightOdds(getStep(GAME_CONFIG, 'road'), even)).toBeNull(); // not a fight
   });
 
   it('gives stronger heroes better odds, a bigger Victory slice, and fewer deaths', () => {
-    const { world, hero } = worldWithHero(77);
-    const strong = { ...hero, weaponTier: 10 };
+    const { world, hero: rolled } = worldWithHero(77);
+    const hero: Character = { ...rolled, archetype: null, rules: undefined }; // power alone, without an archetype's tricks
+    const strong = { ...hero, weapon: plainItem('weapon', 10), stats: { ...hero.stats, might: Math.max(10, hero.stats.might) } };
     const victory = (c: Character) => dealOptions(troll, c, GAME_CONFIG).find((o) => o.id === 'victory')!.baseWeight;
     expect(fightOdds(troll, strong)!).toBeGreaterThan(fightOdds(troll, hero)!);
     expect(victory(strong)).toBeGreaterThan(victory(hero));
@@ -814,7 +828,7 @@ describe('adventures', () => {
       return dead / 6_000;
     };
     expect(deathRate(strong)).toBeLessThan(deathRate(hero));
-  });
+  }, 20_000); // 12,000 whole adventures, Spoils wheels and all
 
   it('sends Monster Lair adventurers to one of several lairs, then into its fight', () => {
     const { world, hero } = worldWithHero(79);
@@ -825,7 +839,9 @@ describe('adventures', () => {
       const at = rolls.findIndex((r) => r.stepId === 'lairs');
       if (at < 0) continue;
       lairs.add(rolls[at]!.optionId);
-      expect(rolls[at + 1]?.stepId).toMatch(/^fight_/);
+      // Straight into the fight, unless something comes first: a Trickster's gambit, a chance to slip past it.
+      const then = rolls.slice(at + 1).find((r) => !['trickster_gambit', 'gamble'].includes(r.stepId));
+      expect(then?.stepId).toMatch(/^fight_|^shadowstep$/);
     }
     // Every lair but the Haunted Crypt, which waits for two souls in the graveyard.
     expect([...lairs].sort()).toEqual(['dragons_den', 'goblin_warren', 'spider_nest', 'troll_bridge', 'wyvern_roost']);
@@ -871,11 +887,11 @@ describe('adventures', () => {
     }
     const offer = resolveSlices(getStep(GAME_CONFIG, 'road').options, world, honest).find((s) => s.option.id === 'tempting_offer');
     expect(offer?.locked).toBe(true);
-  });
+  }, 20_000); // long lives, every fight a battle
 
   it('brings outlaws back as foes, at their own Combat Power, and lets heroes bring them to justice', () => {
     const base = worldWithHero(85);
-    const { world, other: outlaw } = withSecond(base.world, 86, { role: 'outlaw', weaponTier: 6 });
+    const { world, other: outlaw } = withSecond(base.world, 86, { role: 'outlaw', weapon: plainItem('weapon', 6) });
     const road = resolveSlices(getStep(GAME_CONFIG, 'road').options, world, base.hero);
     expect(road.find((s) => s.option.id === 'familiar_face')?.locked).toBe(false);
 
@@ -890,11 +906,12 @@ describe('adventures', () => {
     expect(after.roster.some((c) => c.id === outlaw.id)).toBe(false);
     expect(after.graveyard.find((c) => c.id === outlaw.id)).toMatchObject({
       status: 'fallen',
-      weaponTier: 0, // everything they stole goes to the one who stopped them
+      weapon: null, // everything they stole goes to the one who stopped them
       fate: { at: 9, summary: `Brought down by ${base.hero.name}` },
     });
     expect(justice.rolls.find((r) => r.stepId === 'fight_outlaw')?.note).toMatch(new RegExp(outlaw.name));
-    expect(justice.character.weaponTier).toBeGreaterThanOrEqual(6);
+    // Their blade was offered; the hero kept whichever was better.
+    expect(justice.character.weapon?.power ?? 0).toBeGreaterThanOrEqual(Math.min(6, base.hero.weapon?.power ?? 6));
   });
 
   it('lets a retired legend come out of retirement', () => {
@@ -1008,8 +1025,9 @@ describe('stat rolls', () => {
     const rng = createSeededRng(90);
     let sawBonus = false;
     let sawOverflow = false;
+    const plain = plainArchetypes(GAME_CONFIG); // archetypes that reshape stat wheels have their own tests
     for (let i = 0; i < 300; i++) {
-      const { spins } = rollFullCharacter(GAME_CONFIG, freshWorld(), rng, { now: 0 });
+      const { spins } = rollFullCharacter(plain, freshWorld(), rng, { now: 0 });
       const statSpins = spins.filter((sp) => sp.step.id.startsWith('stat_'));
       expect(statSpins.map((sp) => sp.step.id.split('_')[1])).toEqual(['might', 'agility', 'intellect', 'arcana', 'vitality']);
       for (const spin of statSpins) {
@@ -1097,11 +1115,12 @@ describe('stat rolls', () => {
   });
 
   it('makes Empty Hands about one soul in five among seventeen weapons', () => {
-    // 18 of 86.5 for a non-elf once a hero has fallen (the Heirloom unlocked).
+    // 18 of 86.5 for a non-elf once a hero has fallen (the Heirloom unlocked), with the
+    // common slices (41.5 of it, Empty Hands among them) trimmed by COMMON_FACTOR.
     const mourning = withGraveyard(freshWorld(), 1);
     const empty = resolveSlices(dealOptions(armory, freshChar(), GAME_CONFIG), mourning, freshChar()).find((s) => s.option.id === 'empty_hands')!;
-    expect(empty.probability).toBeCloseTo(18 / 86.5, 9);
-    expect(armory.options.filter((o) => o.weaponTierDelta).length).toBe(17);
+    expect(empty.probability).toBeCloseTo((18 * COMMON_FACTOR) / (86.5 - 41.5 * (1 - COMMON_FACTOR)), 9);
+    expect(armory.options.filter((o) => o.gear?.weapon).length).toBe(17);
   });
 });
 
@@ -1171,7 +1190,7 @@ describe('persistence', () => {
     storage.setItem('roguelite.world', JSON.stringify(v2));
 
     const loaded = loadWorld(storage);
-    expect(loaded?.schemaVersion).toBe(9);
+    expect(loaded?.schemaVersion).toBe(10);
     expect(loaded?.roster[0]).toEqual({
       ...oldHero,
       race: null,
@@ -1182,7 +1201,6 @@ describe('persistence', () => {
       luck: 0,
       statBonus: NO_BONUS,
       spinQueue: [],
-      armorTier: 0,
       fame: 0,
     });
     expect(loaded?.graveyard[0]?.adventures).toEqual([]);
@@ -1192,18 +1210,18 @@ describe('persistence', () => {
     const storage = memoryStorage();
     const { luck: _l, statBonus: _b, personality: _p, title: _t, ...v3Hero } = { ...freshChar(), status: 'alive' as const, race: 'elf' };
     storage.setItem('roguelite.world', JSON.stringify({ ...freshWorld(), schemaVersion: 3, roster: [v3Hero] }));
-    expect(loadWorld(storage)?.roster[0]).toEqual({ ...v3Hero, personality: null, title: null, luck: 0, statBonus: NO_BONUS, armorTier: 0, fame: 0 });
+    expect(loadWorld(storage)?.roster[0]).toEqual({ ...v3Hero, personality: null, title: null, luck: 0, statBonus: NO_BONUS, fame: 0 });
   });
 
   it('upgrades a v7 save: no armour yet, and fame for the adventures already behind them', () => {
     const storage = memoryStorage();
-    const { armorTier: _a, fame: _f, ...v7Hero } = {
+    const { armor: _a, fame: _f, ...v7Hero } = {
       ...freshChar(),
       status: 'alive' as const,
       adventures: [1, 2, 3].map(() => ({ rolls: [], outcome: 'returned' as const })),
     };
     storage.setItem('roguelite.world', JSON.stringify({ ...freshWorld(), schemaVersion: 7, roster: [v7Hero] }));
-    expect(loadWorld(storage)?.roster[0]).toEqual({ ...v7Hero, armorTier: 0, fame: 18 });
+    expect(loadWorld(storage)?.roster[0]).toEqual({ ...v7Hero, armor: null, fame: 18 });
   });
 
   it('drops malformed singleton entries instead of locking a role forever', () => {

@@ -143,7 +143,7 @@ describe('unfinished business', () => {
     const haunted = soul(17, { tags: ['hook:followed'] });
     expect(dealt(haunted, 'crossroads')).toContain('unfinished_business');
     const due = land(at(haunted, 'crossroads'), worldOf(haunted), 'unfinished_business');
-    expect(due.currentStepId).toBe('fight_follower');
+    expect(due.currentStepId).toBe('battle:fight_follower');
     expect(due.rolls.at(-1)?.callback).toBe('Their unfinished business came due');
   });
 

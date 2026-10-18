@@ -1,6 +1,6 @@
 /** Display helpers. Pure functions, so they're easy to test and reuse. */
 import { racesOf } from '../engine/character';
-import type { Character, CharacterRole, ExitStatus, GameConfig, StatKey, WheelOption } from '../engine/types';
+import type { Character, CharacterRole, ExitStatus, GameConfig, GearGrant, GearKind, StatKey, WheelOption } from '../engine/types';
 
 export const STAT_LABELS: Record<StatKey, string> = {
   might: 'Might',
@@ -184,10 +184,14 @@ export function describeEffects(
     if (value) effects.push(`${stat(key)} roll ${signed(value)} ${Math.abs(value) === 1 ? 'position' : 'positions'}`);
   }
   if (option.luckDelta) effects.push(`Luck ${signed(option.luckDelta)}`);
-  if (option.weaponTierDelta) effects.push(`Weapon tier ${signed(option.weaponTierDelta)}`);
-  if (option.armorTierDelta) effects.push(`Armour tier ${signed(option.armorTierDelta)}`);
-  if (option.gear?.weapon) effects.push(`A tier ${option.gear.weapon} weapon, kept if better`);
-  if (option.gear?.armor) effects.push(`Tier ${option.gear.armor} armour, kept if better`);
+  // A gain is a new find (Keep or Take) unless a smith is at work; a loss wears down what they carry.
+  const tier = (delta: number | undefined, noun: string) =>
+    !delta ? null : delta < 0 || option.upgrade ? `${noun} power ${signed(delta)}` : `A ${noun.toLowerCase()} ${delta} power better than theirs (or keep theirs)`;
+  for (const line of [tier(option.weaponTierDelta, 'Weapon'), tier(option.armorTierDelta, 'Armour')]) if (line) effects.push(line);
+  for (const kind of ['weapon', 'armor'] as const) {
+    const grant = option.gear?.[kind];
+    if (grant !== undefined) effects.push(describeGrant(grant, kind, config));
+  }
   if (option.fame) effects.push(option.fame > 0 ? `${signed(option.fame)} fame` : `${signed(option.fame)} fame (disgrace)`);
   for (const traitId of option.grantTraits ?? []) {
     effects.push(`Gains ${config.traits[traitId]?.name ?? traitId}`);
@@ -245,4 +249,18 @@ export function describeEffects(
     if (castEffect.fame) effects.push(`${who}: ${signed(castEffect.fame)} fame`);
   }
   return effects;
+}
+
+/** What a gear grant hands over, in words: 'The Holy Sword (power 10)', 'A power 3 weapon'. */
+export function describeGrant(grant: GearGrant, kind: GearKind, config: GameConfig): string {
+  const noun = kind === 'weapon' ? 'weapon' : 'armour';
+  const choice = ' (or keep theirs)';
+  if (typeof grant === 'number') return `A power ${grant} ${noun}${choice}`;
+  if ('item' in grant) return `${grant.item.name} (power ${grant.item.power})${choice}`;
+  if ('better' in grant) return `A random ${noun}, ${grant.better} power above theirs${choice}`;
+  if ('unique' in grant) {
+    const unique = config.gear?.uniques[grant.unique];
+    return unique ? `${unique.name} (power ${unique.power})${choice}` : grant.unique;
+  }
+  return grant.name ? `${grant.name} (power ${grant.power})${choice}` : `A power ${grant.power} ${noun}${choice}`;
 }

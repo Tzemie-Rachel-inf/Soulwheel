@@ -10,8 +10,11 @@
  *   stats   × max(0, 1 + Σ statScaling[stat] × (char.stats[stat] − 10)): the best outcomes favour the sharp, the strong...
  *   fame    × max(0, 1 + fameScaling × the character's fame tier): the famous take riskier roads
  *   traits  options with `requiresTrait` are dealt only to characters who own one of those traits
+ *   common  × COMMON_FACTOR for common options, so the rarer ones come up a little more often
+ *           (not on ladders, fights, choices or `exactOdds` wheels, whose odds are exact by design)
  *   fights  on a wheel with a foe, 'win' options × P(win), 'lose' options × (1 − P(win)),
- *           where P(win) = heroCP / (heroCP + foe.power)
+ *           where P(win) = heroCP' / (heroCP' + foe.power), heroCP' being CP × the damage matchup
+ *           (engine/matchup.ts: the right weapon against the foe, armour that turns its blows)
  *
  * Dealt weights are still "base" weights: they size the slices on the wheel (these are
  * this character's real chances), while world threat and locks are applied afterwards by
@@ -19,15 +22,18 @@
  *
  * Stat values are dealt as written: banked bonuses move a stat roll after it lands (ladder.ts).
  */
+import { shapeOptions, type DealContext } from './archetypes';
 import { racesOf } from './character';
 import { fameFactor } from './fame';
+import { fightMatchup } from './matchup';
 import { STAT_BASELINE, calculatePowerRating, calculateWinProbability } from './power';
 import { STAT_KEYS, type Character, type GameConfig, type WheelOption, type WheelStep } from './types';
 
 /** The chance `char` beats the wheel's foe, from Combat Power. Null when the wheel is not a fight. */
 export function fightOdds(step: WheelStep, char: Character): number | null {
   if (!step.foe) return null;
-  return calculateWinProbability(calculatePowerRating(char), step.foe.power);
+  // A Trickster's pre-battle wheel bends their power for this fight only; the right weapon (and armour) bend it too.
+  return calculateWinProbability(calculatePowerRating(char) * (char.fightBoost ?? 1) * fightMatchup(char, step.foe), step.foe.power);
 }
 
 /** Luck's multiplier for one option. Never negative; non-finite collapses to 0. */
@@ -85,14 +91,24 @@ export function personalityFactor(stepId: string, optionId: string, char: Charac
   return Number.isFinite(factor) ? Math.max(0, factor) : 0;
 }
 
+/** How much common options are trimmed on an ordinary wheel. */
+export const COMMON_FACTOR = 0.85;
+
+export function commonFactor(step: WheelStep, option: WheelOption): number {
+  if (step.ladder || step.foe || step.foeOf || step.choice || step.exactOdds) return 1;
+  return (option.rarity ?? 'common') === 'common' ? COMMON_FACTOR : 1;
+}
+
 /**
  * A wheel's options as `char` is dealt them. Pure: the config's options are never
  * mutated; options with nothing to adjust are returned as they are. Trait outcomes the
  * character can't get are left out, so the dealt list can be shorter than the wheel's.
+ * Last of all, the character's archetype has its say (archetypes.ts: `shapeOptions`): slices
+ * trimmed, dreamt up, broken or reweighed. Pass `ctx.world` so locked slices are left out of that.
  */
-export function dealOptions(step: WheelStep, char: Character, config: GameConfig): WheelOption[] {
+export function dealOptions(step: WheelStep, char: Character, config: GameConfig, ctx: DealContext = {}): WheelOption[] {
   const win = fightOdds(step, char);
-  return step.options.filter((written) => canBeDealt(written, char, config)).map((written) => {
+  const dealt = step.options.filter((written) => canBeDealt(written, char, config)).map((written) => {
     const option = written.vary ? { ...written, ...written.vary(char) } : written;
     const fight = win === null || !option.fight ? 1 : option.fight === 'win' ? win : 1 - win;
     const scale =
@@ -102,8 +118,10 @@ export function dealOptions(step: WheelStep, char: Character, config: GameConfig
       luckFactor(option, char) *
       statFactor(option, char) *
       fameFactor(option, char, config) *
+      commonFactor(step, option) *
       fight;
     if (scale === 1) return option;
     return { ...option, baseWeight: option.baseWeight * scale };
   });
+  return shapeOptions(step, dealt, char, config, ctx);
 }

@@ -3,6 +3,7 @@
  * wheel and twists of fate: the engine features they rely on, through the sample config.
  */
 import { describe, expect, it } from 'vitest';
+import { plainItem } from './testConfig';
 import { GAME_CONFIG } from '../config/gameConfig';
 import { isRace } from '../config/races';
 import { heroRace } from '../ui/format';
@@ -17,7 +18,7 @@ import {
   type AdventureState,
 } from './adventure';
 import { applyOption, createCharacter, earnedTitle, nameCharacter } from './character';
-import { getStep, resolveNextStep, rollFullCharacter, spinCurrentStep, startGeneration } from './generation';
+import { getStep, resolveNextStep, rollFullCharacter, spinCurrentStep, startGeneration, lookupGenerationStep } from './generation';
 import { dealOptions, raceFactor } from './odds';
 import { calculatePowerRating, getPowerBreakdown, traitPower } from './power';
 import { createSeededRng } from './rng';
@@ -63,7 +64,7 @@ describe('spin queues and powers', () => {
     god = take(god, 'blessed_powers', 'smite');
     expect(god.spinQueue.filter((id) => id === 'blessed_powers')).toHaveLength(2);
 
-    const full = rollUntil(world(), 7, (c) => c.race === 'god');
+    const full = rollUntil(world(), 8, (c) => c.race === 'god');
     expect(full.spinQueue).toEqual([]);
     expect(full.traits.filter((t) => ['healing_light', 'divine_shield', 'smite', 'holy_flame', 'radiant_aura', 'sanctuary', 'fortunes_blessing', 'angelic_wings', 'resurrection', 'miracle'].includes(t.id)).length).toBeGreaterThan(0);
   });
@@ -260,7 +261,7 @@ describe('ancestry, again: corrupted, ascended, undead and hybrid souls', () => 
       // Force the rarest doors on the first wheels: hybrid, then demons and angels inside it.
       const force = ['hybrid', 'demon', 'corrupted', 'celestial', 'ascended', 'construct', 'undead'];
       while (state.currentStepId !== null) {
-        const step = getStep(GAME_CONFIG, state.currentStepId);
+        const step = lookupGenerationStep(GAME_CONFIG, state.currentStepId, state.character);
         const dealt = dealOptions(step, state.character, GAME_CONFIG);
         const slices = resolveSlices(dealt, w, state.character).filter((s) => !s.locked && s.probability > 0);
         const forced = rng() < 0.7 ? slices.find((s) => force.includes(s.option.id)) : undefined;
@@ -278,18 +279,26 @@ describe('ancestry, again: corrupted, ascended, undead and hybrid souls', () => 
 });
 
 describe('archetypes', () => {
-  it('comes right after the race’s own wheels, and bends later wheels', () => {
+  const after = (char: Character, stepId: string, optionId: string) =>
+    resolveNextStep(getStep(GAME_CONFIG, stepId).options.find((o) => o.id === optionId)!.nextStepId, world(), char);
+
+  it('comes right after the race’s own wheels, and freezes its rules onto the soul', () => {
     const human = take(soul(), 'ancestry', 'human');
     const homeland = getStep(GAME_CONFIG, 'human_homeland').options[0]!;
     expect(resolveNextStep(homeland.nextStepId, world(), human)).toBe('archetype');
-    const mage = take(human, 'archetype', 'mage');
-    expect(mage.archetype).toBe('mage');
-    expect(mage.spinQueue).toEqual(['arcane_powers']);
-    expect(chance('armory', 'runed_staff', mage)).toBeGreaterThan(chance('armory', 'runed_staff', human) * 2);
+    const archmage = take(human, 'archetype', 'archmage');
+    expect(archmage.archetype).toBe('archmage');
+    expect(archmage.rules).toEqual({ noWeapon: true, spellMultiplier: 2 });
+    expect(archmage.spinQueue).toEqual(['arcane_powers']); // an Archmage starts out knowing one spell
+    expect(after(human, 'archetype', 'vessel')).toBe('vessel_of');
+    expect(after(human, 'archetype', 'wise')).toBe('fate');
   });
 
-  it('is leaned on by race: orcs make barbarians', () => {
-    expect(chance('archetype', 'barbarian', take(soul(), 'ancestry', 'orc'))).toBeGreaterThan(chance('archetype', 'barbarian', take(soul(), 'ancestry', 'human')) * 2);
+  it('has one slice per archetype, its rarity the archetype’s own', () => {
+    const wheel = getStep(GAME_CONFIG, 'archetype');
+    expect(wheel.options.map((o) => o.id)).toEqual(Object.keys(GAME_CONFIG.archetypes));
+    for (const o of wheel.options) expect(o.rarity).toBe(GAME_CONFIG.archetypes[o.id]!.rarity);
+    expect(chance('archetype', 'wise', soul())).toBeGreaterThan(chance('archetype', 'transcendent', soul()) * 20);
   });
 });
 
@@ -389,7 +398,8 @@ describe('the crossroads', () => {
 
   it('meets the road home when an adventure would end after a spin or two, and only once', () => {
     const { w, hero: h } = hero(16);
-    const state: AdventureState = { ...startAdventure(GAME_CONFIG, h), currentStepId: 'study' };
+    const plain = { ...h, archetype: null, rules: undefined }; // a Gambler would bet what they learned first
+    const state: AdventureState = { ...startAdventure(GAME_CONFIG, plain), currentStepId: 'study' };
     const after = spinAdventure(state, GAME_CONFIG, w, createSeededRng(5)).state;
     expect(after.currentStepId).toBe('road_home');
     const tale = { ...GAME_CONFIG, steps: { ...GAME_CONFIG.steps, road_home: { ...getStep(GAME_CONFIG, 'road_home'), options: getStep(GAME_CONFIG, 'road_home').options.filter((o) => o.id === 'tavern_tale') } } };
@@ -430,16 +440,17 @@ describe('stats, spells and traits on the wheels', () => {
     ...extra,
   });
 
-  it('scales a weapon with the better of Might and Agility, and spells with Arcana', () => {
-    const strong = fighter({ might: 20, agility: 12 }, { weaponTier: 4 });
+  it('scales a weapon with the stat it is wielded with, and spells with Arcana', () => {
+    const strong = fighter({ might: 20, agility: 12 }, { weapon: plainItem('weapon', 4) });
     expect(getPowerBreakdown(strong)).toMatchObject({ weapon: 150, weaponScale: 1.5 }); // 4 × 25 × 1.5
-    const nimble = fighter({ might: 4, agility: 16 }, { weaponTier: 4 });
-    expect(getPowerBreakdown(nimble).weapon).toBe(130); // agility 16: ×1.3
+    const nimble = fighter({ might: 4, agility: 16 }, { weapon: plainItem('weapon', 4, 'agility') });
+    expect(getPowerBreakdown(nimble).weapon).toBe(130); // a dagger, agility 16: ×1.3
+    expect(getPowerBreakdown({ ...nimble, weapon: plainItem('weapon', 4) }).weapon).toBe(52); // a longsword in weak arms (Might 4): ×0.52
 
     const fireball = GAME_CONFIG.traits['fireball']!;
     expect(fireball.scalesWith).toEqual(['arcana']);
     expect(traitPower(fireball, fighter({ arcana: 20 }))).toBe(Math.round(fireball.power * 1.5));
-    expect(traitPower(fireball, fighter({ arcana: 4 }))).toBe(Math.round(fireball.power * 0.7));
+    expect(traitPower(fireball, fighter({ arcana: 4 }))).toBe(Math.round(fireball.power * 0.52));
     expect(traitPower(GAME_CONFIG.traits['dragonslayer']!, fighter({ arcana: 20 }))).toBe(GAME_CONFIG.traits['dragonslayer']!.power); // not a spell
   });
 

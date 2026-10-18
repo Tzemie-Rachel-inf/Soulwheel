@@ -73,12 +73,15 @@
  *  - Cross-rule:           the Holy Sword wakes only while a Demon Lord reigns, and rejects cursed blood.
  *  - Threat scaling:       darkness, monsters and death grow likelier as threatLevel rises.
  */
+import { weaponPower } from '../engine/gear';
 import { calculatePowerRating } from '../engine/power';
 import { isSingletonClaimed } from '../engine/world';
 import type { CastWheelConfig, Character, GameConfig, Race, Rarity, StatBlock, StepRoute, Trait, WheelOption, WheelStep } from '../engine/types';
 import { ACTIVITY_STEPS, ACTIVITY_TRAITS } from './activities';
-import { ARCHETYPE, ARCHETYPES } from './archetypes';
+import { ARCHETYPES, ARCHETYPE_STEPS, VESSEL_TRAITS } from './archetypes';
 import { ARMOR_STEPS, ARMOR_TRAITS } from './armor';
+import { GEAR_ABILITY_TRAITS, GEAR_CONFIG } from './gear';
+import { BATTLE_CONFIG } from './battle';
 import {
   FOES,
   PERSONALITIES,
@@ -109,19 +112,23 @@ import { ALL_POWER_TRAITS, POWERS_ROUTE, POWER_STEPS } from './powers';
 import { ANCESTRY, RACES, RACE_TRAITS, RACE_WHEELS, isRace, racesOf } from './races';
 import { ASCENSION_WHEELS, STATS_START, STAT_WHEELS, TRAINING_WHEELS, TRAIN_STAT, statTierName } from './stats';
 import { HOOKS, IDENTITIES, METERS, PLACE_KINDS, STAKES_STEPS, STAKES_TRAITS, isConstruct, isVampire } from './stakes';
+import { SHADOWSTEP_STEP_ID, TALENT_STEPS, TALENT_TRAITS } from './talents';
 
 /** Where every stat sits before its wheel is rolled. */
 const BASE_STATS: StatBlock = { might: 10, agility: 10, intellect: 10, arcana: 10, vitality: 10 };
 
 const TRAITS = {
   ...RACE_TRAITS,
+  ...VESSEL_TRAITS,
   ...OTHERWORLDLY_TRAITS,
   ...ALL_POWER_TRAITS,
   ...ACTIVITY_TRAITS,
   ...ARMOR_TRAITS,
+  ...GEAR_ABILITY_TRAITS,
   ...LEGACY_TRAITS,
   ...QUEST_TRAITS,
   ...STAKES_TRAITS,
+  ...TALENT_TRAITS,
   // Fate
   divine_favor: { id: 'divine_favor', name: 'Divine Favor', description: 'The gods watch over this soul.', power: 40 },
   cursed_blood: { id: 'cursed_blood', name: 'Cursed Blood', description: 'Power with a price. Holy relics refuse you.', power: 20 },
@@ -129,11 +136,11 @@ const TRAITS = {
   // Talents
   blademaster: { id: 'blademaster', name: 'Blademaster', description: 'Any weapon fights a tier above its make.', power: 25, scalesWith: ['might', 'agility'] },
   arcane_savant: { id: 'arcane_savant', name: 'Arcane Savant', description: 'Reads spells the way others read signs.', power: 35, scalesWith: ['arcana'] },
-  iron_will: { id: 'iron_will', name: 'Iron Will', description: 'Gets back up. Every time.', power: 20 },
+  iron_will: { id: 'iron_will', name: 'Iron Will', description: 'Gets back up: once a fight, a blow that would drop them leaves them standing at 1 HP.', power: 20 },
   shadowstep: { id: 'shadowstep', name: 'Shadowstep', description: 'Strikes from where no one is standing.', power: 25, scalesWith: ['agility'] },
   ancestral_echoes: { id: 'ancestral_echoes', name: 'Echoes of the Fallen', description: 'Guided by heroes who died before.', power: 45 },
   runesmith: { id: 'runesmith', name: 'Runesmith', description: 'Every blade they touch remembers its maker.', power: 30 },
-  holy_sword: { id: 'holy_sword', name: 'Holy Sword Bearer', description: 'Chosen to end the Demon Lord’s reign.', power: 60, item: 'weapon' },
+  holy_sword: { id: 'holy_sword', name: 'Holy Sword Bearer', description: 'Chosen to end the Demon Lord’s reign, with the finest blade there is (power 10 of 10).', power: 60, item: 'weapon' },
   archmage: { id: 'archmage', name: 'Archmage of the Spire', description: 'The tower answers to one mage at a time.', power: 70, scalesWith: ['arcana'] },
   // Armory
   dragonbone: { id: 'dragonbone', name: 'Dragonbone', description: 'The blade remembers the dragon it came from.', power: 20, item: 'weapon' },
@@ -268,6 +275,7 @@ const ABYSS_CALLS: WheelStep = {
   id: 'abyss_calls',
   title: 'The Abyss Calls',
   subtitle: 'Something below knows your name. Some never become heroes at all.',
+  exactOdds: true,
   options: [
     {
       vary: abyssPull(0),
@@ -340,7 +348,7 @@ const PERSONALITY: WheelStep = {
     { id: 'honorable', label: 'Honorable', description: PERSONALITIES.honorable.description, baseWeight: 7, rarity: 'rare', setPersonality: 'honorable', epithet: { text: 'the Honorable', priority: 14 }, nextStepId: STATS_START, color: '#c9b27a', icon: 'Scale' },
     { id: 'cruel', label: 'Cruel', description: PERSONALITIES.cruel.description, baseWeight: 5, rarity: 'rare', setPersonality: 'cruel', epithet: { text: 'the Cruel', priority: 14 }, statBonus: { might: 1 }, nextStepId: STATS_START, color: '#6e1f2a', icon: 'Droplet' },
     { id: 'ambitious', label: 'Ambitious', description: PERSONALITIES.ambitious.description, baseWeight: 4, rarity: 'rare', setPersonality: 'ambitious', epithet: { text: 'the Ambitious', priority: 14 }, statBonus: { intellect: 1 }, nextStepId: STATS_START, color: '#7a3e8a', icon: 'Crown' },
-    { id: 'lionhearted', label: 'Lionhearted', description: 'Brave the way the songs mean it. They get back up, every time, and everyone around them stands a little taller.', baseWeight: 2, rarity: 'epic', setPersonality: 'brave', grantTraits: ['iron_will'], statBonus: { might: 1, agility: 1, intellect: 1, arcana: 1, vitality: 1 }, epithet: { text: 'the Lionhearted', priority: 44 }, nextStepId: STATS_START, color: '#ffd76a', icon: 'ShieldCheck' },
+    { id: 'lionhearted', label: 'Lionhearted', description: 'Brave the way the songs mean it. Knocked down, they get back up once more, and everyone around them stands a little taller.', baseWeight: 2, rarity: 'epic', setPersonality: 'brave', grantTraits: ['iron_will'], statBonus: { might: 1, agility: 1, intellect: 1, arcana: 1, vitality: 1 }, epithet: { text: 'the Lionhearted', priority: 44 }, nextStepId: STATS_START, color: '#ffd76a', icon: 'ShieldCheck' },
   ],
 };
 
@@ -371,6 +379,7 @@ const TALENTS: WheelStep = {
       rarity: 'common',
       statModifiers: { might: 3, agility: 2 },
       weaponTierDelta: 1, // mastery: whatever the Armory gives, it hits a tier harder
+      upgrade: true, // a real upgrade: what they carry gets better
       grantTraits: ['blademaster'],
       nextStepId: 'armory',
       color: '#e11d48',
@@ -441,6 +450,7 @@ const TALENTS: WheelStep = {
       rarity: 'rare',
       statModifiers: { intellect: 2, might: 1 },
       weaponTierDelta: 1,
+      upgrade: true, // a real upgrade: what they carry gets better
       grantTraits: ['runesmith'],
       condition: isRace('dwarf'),
       lockedReason: 'Only dwarves are taught the runes',
@@ -483,8 +493,8 @@ const TALENTS: WheelStep = {
         if (char.tags.includes('cursed')) return 'The Holy Sword rejects cursed blood';
         return 'The Holy Sword sleeps until a Demon Lord rises';
       },
-      weaponTierDelta: 5,
-      grantTraits: ['holy_sword'],
+      gear: { weapon: { unique: 'holy_sword' } }, // the finest blade there is: a 10 of 10
+      holy: true,
       nextStepId: 'outfitter', // already armed: skips the Armory, but still dresses for the road
       color: '#facc15',
       icon: 'Sword',
@@ -520,18 +530,18 @@ const ARMORY: WheelStep = {
     },
     // Seventeen weapons share the rest. Their weights add up to what the eight before them
     // did (68.5 with the Heirloom unlocked); Empty Hands is about one soul in five.
-    weapon({ id: 'rusted_shortsword', label: 'Rusted Shortsword', description: 'It has seen better centuries.', baseWeight: 9, rarity: 'common', weaponTierDelta: 1, color: '#a16207', icon: 'Slice' }),
-    weapon({ id: 'hunting_spear', label: 'Hunting Spear', description: 'Reach, balance, and a sharp point.', baseWeight: 7.5, rarity: 'common', weaponTierDelta: 1, statModifiers: { might: 1 }, color: '#8a6a3a', icon: 'Crosshair' }),
-    weapon({ id: 'iron_mace', label: 'Iron Mace', description: 'Crude, heavy, honest.', baseWeight: 7, rarity: 'common', weaponTierDelta: 1, statModifiers: { vitality: 1 }, color: '#6e7280', icon: 'Gavel' }),
-    weapon({ id: 'hunters_longbow', label: 'Hunter’s Longbow', description: 'Patience, strung and waxed.', baseWeight: 6, rarity: 'uncommon', luckScaling: 0.3, weaponTierDelta: 2, statModifiers: { agility: 2 }, color: '#15803d', icon: 'Target' }),
-    weapon({ id: 'runed_staff', label: 'Runed Staff', description: 'Warm to the touch, and humming.', baseWeight: 5, rarity: 'uncommon', luckScaling: 0.4, weaponTierDelta: 2, statModifiers: { arcana: 3 }, color: '#7c3aed', icon: 'WandSparkles' }),
-    weapon({ id: 'war_axe', label: 'Dwarven War Axe', description: 'Heavy enough to settle arguments.', baseWeight: 5, rarity: 'uncommon', luckScaling: 0.5, weaponTierDelta: 3, statModifiers: { might: 3 }, color: '#b45309', icon: 'Axe' }),
-    weapon({ id: 'twin_daggers', label: 'Twin Daggers', description: 'One for the front, one for the back.', baseWeight: 4.5, rarity: 'uncommon', luckScaling: 0.3, weaponTierDelta: 2, statModifiers: { agility: 2 }, color: '#4a4a5e', icon: 'Swords' }),
-    weapon({ id: 'crossbow', label: 'Crossbow', description: 'Point, pull, problem solved.', baseWeight: 4.5, rarity: 'uncommon', luckScaling: 0.3, weaponTierDelta: 2, statModifiers: { agility: 1 }, color: '#6e5a42', icon: 'Target' }),
-    weapon({ id: 'apprentice_wand', label: 'Apprentice’s Wand', description: 'A little stick that does big things, for the right hand.', baseWeight: 4, rarity: 'uncommon', luckScaling: 0.4, weaponTierDelta: 1, statModifiers: { arcana: 4 }, color: '#8a6ae0', icon: 'Wand' }),
-    weapon({ id: 'warhammer', label: 'Warhammer', description: 'Armour is just a suggestion.', baseWeight: 3, rarity: 'rare', luckScaling: 0.6, weaponTierDelta: 3, statModifiers: { might: 2, vitality: 1 }, color: '#5f6470', icon: 'Hammer' }),
-    weapon({ id: 'duelist_rapier', label: 'Duelist’s Rapier', description: 'Thin, quick, and very rude.', baseWeight: 3, rarity: 'rare', luckScaling: 0.6, weaponTierDelta: 3, statModifiers: { agility: 3 }, color: '#9a8a6a', icon: 'Sword' }),
-    weapon({ id: 'greatsword', label: 'Greatsword', description: 'Taller than some of its owners.', baseWeight: 2.5, rarity: 'rare', luckScaling: 0.6, weaponTierDelta: 4, statModifiers: { might: 2 }, color: '#7a8a9a', icon: 'Sword' }),
+    weapon({ id: 'rusted_shortsword', label: 'Rusted Shortsword', description: 'It has seen better centuries.', baseWeight: 9, rarity: 'common', gear: { weapon: { power: 1, rarity: 'common', base: 'shortsword', name: 'Rusted Shortsword' } }, color: '#a16207', icon: 'Slice' }),
+    weapon({ id: 'hunting_spear', label: 'Hunting Spear', description: 'Reach, balance, and a sharp point.', baseWeight: 7.5, rarity: 'common', gear: { weapon: { power: 1, rarity: 'common', base: 'spear', name: 'Hunting Spear' } }, statModifiers: { might: 1 }, color: '#8a6a3a', icon: 'Crosshair' }),
+    weapon({ id: 'iron_mace', label: 'Iron Mace', description: 'Crude, heavy, honest.', baseWeight: 7, rarity: 'common', gear: { weapon: { power: 1, rarity: 'common', base: 'mace', name: 'Iron Mace' } }, statModifiers: { vitality: 1 }, color: '#6e7280', icon: 'Gavel' }),
+    weapon({ id: 'hunters_longbow', label: 'Hunter’s Longbow', description: 'Patience, strung and waxed.', baseWeight: 6, rarity: 'uncommon', luckScaling: 0.3, gear: { weapon: { power: 2, rarity: 'uncommon', base: 'bow', name: 'Hunter’s Longbow' } }, statModifiers: { agility: 2 }, color: '#15803d', icon: 'Target' }),
+    weapon({ id: 'runed_staff', label: 'Runed Staff', description: 'Warm to the touch, and humming.', baseWeight: 5, rarity: 'uncommon', luckScaling: 0.4, gear: { weapon: { power: 2, rarity: 'uncommon', base: 'staff', name: 'Runed Staff' } }, statModifiers: { arcana: 3 }, color: '#7c3aed', icon: 'WandSparkles' }),
+    weapon({ id: 'war_axe', label: 'Dwarven War Axe', description: 'Heavy enough to settle arguments.', baseWeight: 5, rarity: 'uncommon', luckScaling: 0.5, gear: { weapon: { power: 3, rarity: 'uncommon', base: 'axe', name: 'Dwarven War Axe' } }, statModifiers: { might: 3 }, color: '#b45309', icon: 'Axe' }),
+    weapon({ id: 'twin_daggers', label: 'Twin Daggers', description: 'One for the front, one for the back.', baseWeight: 4.5, rarity: 'uncommon', luckScaling: 0.3, gear: { weapon: { power: 2, rarity: 'uncommon', base: 'dagger', name: 'Twin Daggers' } }, statModifiers: { agility: 2 }, color: '#4a4a5e', icon: 'Swords' }),
+    weapon({ id: 'crossbow', label: 'Crossbow', description: 'Point, pull, problem solved.', baseWeight: 4.5, rarity: 'uncommon', luckScaling: 0.3, gear: { weapon: { power: 2, rarity: 'uncommon', base: 'crossbow', name: 'Crossbow' } }, statModifiers: { agility: 1 }, color: '#6e5a42', icon: 'Target' }),
+    weapon({ id: 'apprentice_wand', label: 'Apprentice’s Wand', description: 'A little stick that does big things, for the right hand.', baseWeight: 4, rarity: 'uncommon', luckScaling: 0.4, gear: { weapon: { power: 1, rarity: 'uncommon', base: 'wand', name: 'Apprentice’s Wand' } }, statModifiers: { arcana: 4 }, color: '#8a6ae0', icon: 'Wand' }),
+    weapon({ id: 'warhammer', label: 'Warhammer', description: 'Armour is just a suggestion.', baseWeight: 3, rarity: 'rare', luckScaling: 0.6, gear: { weapon: { power: 3, rarity: 'rare', base: 'warhammer', name: 'Warhammer' } }, statModifiers: { might: 2, vitality: 1 }, color: '#5f6470', icon: 'Hammer' }),
+    weapon({ id: 'duelist_rapier', label: 'Duelist’s Rapier', description: 'Thin, quick, and very rude.', baseWeight: 3, rarity: 'rare', luckScaling: 0.6, gear: { weapon: { power: 3, rarity: 'rare', base: 'rapier', name: 'Duelist’s Rapier' } }, statModifiers: { agility: 3 }, color: '#9a8a6a', icon: 'Sword' }),
+    weapon({ id: 'greatsword', label: 'Greatsword', description: 'Taller than some of its owners.', baseWeight: 2.5, rarity: 'rare', luckScaling: 0.6, gear: { weapon: { power: 4, rarity: 'rare', base: 'greatsword', name: 'Greatsword' } }, statModifiers: { might: 2 }, color: '#7a8a9a', icon: 'Sword' }),
     weapon({
       id: 'fallen_heirloom',
       epithet: { text: 'Heir of the Fallen', priority: 32 },
@@ -540,7 +550,7 @@ const ARMORY: WheelStep = {
       baseWeight: 3.5,
       rarity: 'rare',
       luckScaling: 0.6,
-      weaponTierDelta: 4,
+      gear: { weapon: { power: 4, rarity: 'rare', base: 'longsword', name: 'Heirloom of the Fallen' } },
       condition: (world) => world.graveyard.length >= 1,
       lockedReason: 'No hero has fallen yet',
       color: '#0e7490',
@@ -554,15 +564,15 @@ const ARMORY: WheelStep = {
       baseWeight: 2.5,
       rarity: 'epic',
       luckScaling: 0.8,
-      weaponTierDelta: 4,
+      gear: { weapon: { power: 4, rarity: 'epic', base: 'bow', name: 'Elven Moonbow' } },
       statModifiers: { agility: 3 },
       condition: isRace('elf'),
       lockedReason: 'Only an elf can draw a moonbow',
       color: '#7aa7d9',
       icon: 'Moon',
     }),
-    weapon({ id: 'obsidian_glaive', label: 'Obsidian Glaive', description: 'Volcanic glass on a long black haft. It never dulls.', baseWeight: 1.5, rarity: 'epic', luckScaling: 0.8, weaponTierDelta: 4, statModifiers: { might: 2, agility: 2 }, epithet: { text: 'of the Black Glaive', priority: 42 }, color: '#2a2a35', icon: 'Axe' }),
-    weapon({ id: 'stormbow', label: 'Stormbow', description: 'Every arrow lands with a clap of thunder.', baseWeight: 1.25, rarity: 'epic', luckScaling: 0.9, weaponTierDelta: 4, statModifiers: { agility: 3, arcana: 2 }, epithet: { text: 'Stormcaller', priority: 44 }, color: '#4f6fb8', icon: 'CloudLightning' }),
+    weapon({ id: 'obsidian_glaive', label: 'Obsidian Glaive', description: 'Volcanic glass on a long black haft. It never dulls.', baseWeight: 1.5, rarity: 'epic', luckScaling: 0.8, gear: { weapon: { power: 4, rarity: 'epic', base: 'glaive', name: 'Obsidian Glaive' } }, statModifiers: { might: 2, agility: 2 }, epithet: { text: 'of the Black Glaive', priority: 42 }, color: '#2a2a35', icon: 'Axe' }),
+    weapon({ id: 'stormbow', label: 'Stormbow', description: 'Every arrow lands with a clap of thunder.', baseWeight: 1.25, rarity: 'epic', luckScaling: 0.9, gear: { weapon: { power: 4, rarity: 'epic', base: 'bow', name: 'Stormbow', damage: 'lightning' } }, statModifiers: { agility: 3, arcana: 2 }, epithet: { text: 'Stormcaller', priority: 44 }, color: '#4f6fb8', icon: 'CloudLightning' }),
     weapon({
       id: 'dragonbone_blade',
       epithet: { text: 'Dragonbone', priority: 48 },
@@ -572,8 +582,7 @@ const ARMORY: WheelStep = {
       rarity: 'legendary',
       threatScaling: 0.3,
       luckScaling: 1.5,
-      weaponTierDelta: 5,
-      grantTraits: ['dragonbone'],
+      gear: { weapon: { unique: 'dragonbone_blade' } },
       color: '#d6cfb8',
       icon: 'Bone',
     }),
@@ -706,7 +715,7 @@ const FIGHTS = [
     foe: FOES.spiders,
     deadliness: 0.3,
     victory: { label: 'Nest Burned', description: 'The webs went up like paper.', statModifiers: { agility: 2, vitality: 1 } },
-    glory: { statScaling: { agility: 0.03 }, label: 'Silk of the Broodmother', description: 'Woven into a cloak that turns blades.', rarity: 'rare', grantTraits: ['spider_silk'] },
+    glory: { statScaling: { agility: 0.03 }, label: 'Silk of the Broodmother', description: 'Woven into a cloak that turns blades.', rarity: 'rare', gear: { armor: { unique: 'broodmother_silk' } } },
     retreat: { label: 'Poisoned and Fleeing', description: 'The fever broke on the third night.', statModifiers: { vitality: -2 } },
     legend: { label: 'The Broodmother’s Heir', description: 'She died, and her brood chose them. They are very loyal, and very many.', rarity: 'epic', grantTraits: ['spider_brood'], epithet: { text: 'Mother of Spiders', priority: 52 } },
     slain: { label: 'Cocooned', description: 'Wrapped up and saved for later.' },
@@ -777,7 +786,7 @@ const FIGHTS = [
   fightWheel({
     id: 'fight_dragon',
     traitWins: [
-      { id: 'kin_of_dragons', label: 'Kin of Dragons', description: 'It smelled its own blood in theirs, and parleyed. It paid them to leave.', requiresTrait: ['draconic_blood', 'dragon_taught'], grantTraits: ['dragon_gold'], icon: 'Egg' },
+      { id: 'kin_of_dragons', label: 'Kin of Dragons', description: 'It smelled its own blood in theirs, and parleyed. It paid them to leave.', requiresTrait: ['draconic_blood', 'dragon_taught'], gear: { armor: { unique: 'dragon_gold_mail' } }, icon: 'Egg' },
       { id: 'through_the_fire', label: 'Walked Through the Fire', description: 'The flame broke on their shield. Their blade did not.', requiresTrait: ['divine_shield', 'arcane_shield'], grantTraits: ['dragonslayer'], icon: 'ShieldPlus' },
       { id: 'time_stopped', label: 'Stopped Time Mid-Breath', description: 'The fire hung in the air while they walked up and struck.', requiresTrait: ['time_stop', 'wish'], grantTraits: ['dragonslayer'], icon: 'Hourglass' },
     ],
@@ -895,7 +904,8 @@ const ROAD: WheelStep = {
       baseWeight: 10,
       rarity: 'uncommon',
       weaponTierDelta: 2,
-      condition: (_world, char) => char.weaponTier < 2,
+      upgrade: true, // a real upgrade: what they carry gets better
+      condition: (_world, char) => weaponPower(char) < 2,
       lockedReason: 'The smith only stops for the poorly armed',
       nextStepId: null,
       color: '#8a6a3a',
@@ -1105,7 +1115,7 @@ const ROAD: WheelStep = {
       rarity: 'legendary',
       luckScaling: 1, // only the lucky stumble on a sleeping dragon
       weaponTierDelta: 2,
-      grantTraits: ['dragon_gold'],
+      gear: { armor: { unique: 'dragon_gold_mail' } },
       nextStepId: null,
       color: '#d9a400',
       icon: 'Coins',
@@ -1556,7 +1566,7 @@ export const GAME_CONFIG: GameConfig = {
   steps: register([
     // Race wheels end at Archetype, unless a detour (a corrupted mortal's Sin, a hybrid's second half) is waiting.
     ...[ANCESTRY, ...RACE_WHEELS, ...OTHERWORLDLY_STEPS].map(rejoining),
-    ARCHETYPE,
+    ...ARCHETYPE_STEPS,
     FATE,
     ABYSS_CALLS,
     PERSONALITY,
@@ -1580,6 +1590,7 @@ export const GAME_CONFIG: GameConfig = {
     ...LEGACY_STEPS,
     ...QUEST_STEPS,
     ...STAKES_STEPS,
+    ...TALENT_STEPS,
   ]),
   traits: TRAITS,
   races: RACES,
@@ -1594,10 +1605,14 @@ export const GAME_CONFIG: GameConfig = {
     entryStepId: 'crossroads',
     castWheel: CAST_WHEEL,
     roadHome: { stepId: 'road_home', minSpins: 3 },
+    // Shadowstep: before every fight, the hero may try to slip past it (talents.ts).
+    evade: { traits: ['shadowstep'], stepId: SHADOWSTEP_STEP_ID },
   },
   worldEvents: WORLD_EVENTS,
   meters: METERS,
   placeKinds: PLACE_KINDS,
   hooks: HOOKS,
   identities: IDENTITIES,
+  gear: GEAR_CONFIG,
+  battle: BATTLE_CONFIG,
 };

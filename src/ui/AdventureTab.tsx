@@ -4,10 +4,14 @@
  * There is no retirement wheel: heroes earn fame, and fame leads to the endings. Wheels,
  * odds, outcomes and fame tiers all come from config.
  */
-import type { ReactNode } from 'react';
+import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Footprints } from 'lucide-react';
-import { isWhoStep } from '../engine/adventure';
+import { isGearStep, isWhoStep, spellModeOf } from '../engine/adventure';
+import { BATTLE_POOL, FOE_HP_PER_UNIT, foeMaxHp, heroUnits, isBattleStep, poolsOf, type BattleState } from '../engine/battle';
+import { describeMatchup } from '../engine/matchup';
+import { pendingOffer } from '../engine/gear';
 import { fameStanding } from '../engine/fame';
 import { fightOdds } from '../engine/odds';
 import { calculatePowerRating } from '../engine/power';
@@ -15,15 +19,40 @@ import type { Character, Foe, GameConfig, WheelStep, World } from '../engine/typ
 import { findCharacter } from '../engine/world';
 import type { useAdventure } from '../state/useAdventure';
 import { FameMeter } from './FameMeter';
+import { GearCompare } from './GearCard';
 import { Epitaph } from './Headstone';
 import { formatPercent, fullName, lifeOf, ordinal, heroRace, roleLabel, signed } from './format';
 import { OddsList } from './OddsList';
 import { enter, returnToWheel } from './motion';
 import { ChoicePanel, QuestPanel, QuestTale } from './QuestPanel';
-import { OutcomeCard, primaryButton, secondaryButton } from './RollReveal';
+import { OutcomeCard, RevealPopup, jackpotColor, primaryButton, secondaryButton } from './RollReveal';
 import { canNameHeir, houseOf } from '../engine/lineage';
-import { SpinWheel } from './wheel/SpinWheel';
-import { ExpeditionBanner, KnownPlaces, MeterBars, UnfinishedBusiness } from './Stakes';
+import { FateWheels } from './wheel/FateWheels';
+import { isSideBet, sideBetBackdrop } from './wheel/MiniSpinWheel';
+import { ExpeditionBanner, HealthGauge, KnownPlaces, MeterBars, UnfinishedBusiness } from './Stakes';
+import { BattleHUD } from './battle/BattleHUD';
+import { CritCascade } from './battle/CritCascade';
+import { SpellBar } from './battle/SpellBar';
+import { pauseDuration, useSettings } from './settings';
+import { WheelTitle } from './WheelTitle';
+
+const WIDE = '(min-width: 64rem)';
+/** True on a screen wide enough for the right-hand column (Tailwind's lg). */
+function useWideScreen(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia(WIDE);
+      query.addEventListener('change', onChange);
+      return () => query.removeEventListener('change', onChange);
+    },
+    () => window.matchMedia(WIDE).matches,
+  );
+}
+
+/** A battle's rounds spin faster than an ordinary wheel. */
+const CLASH_SPIN_MS = 2300;
+/** How long a landed blow shows on the HUD before the next round comes up. */
+const CLASH_LINGER_MS = 1150;
 
 interface AdventureTabProps {
   config: GameConfig;
@@ -34,9 +63,12 @@ interface AdventureTabProps {
   onCreateHero: () => void;
   /** Their story is over: on to the next soul, or to the heir of `parent`. */
   onNextSoul: (parent?: Character) => void;
+  /** Where the page's right-hand column keeps a place for this wheel's panels, on a wide screen. */
+  sideSlot?: HTMLElement | null;
 }
 
-export function AdventureTab({ config, world, hero: living, adventure, onCreateHero, onNextSoul }: AdventureTabProps) {
+export function AdventureTab({ config, world, hero: living, adventure, onCreateHero, onNextSoul, sideSlot = null }: AdventureTabProps) {
+  const wide = useWideScreen();
   const { session, view } = adventure;
   if (!session || !view) {
     return <HeroHome config={config} world={world} hero={living} error={adventure.error} onEmbark={adventure.embark} onCreateHero={onCreateHero} />;
@@ -54,9 +86,51 @@ export function AdventureTab({ config, world, hero: living, adventure, onCreateH
   const roll = outcome && !isWhoStep(outcome.step.id) ? outcome.state.rolls.at(-1) : undefined;
   const standing = fameStanding(config.fame.tiers, hero.fame);
   const earned = session.state.fameEarned;
+  // Keep or Take: what they carry beside what they found.
+  const offer = view.step && isGearStep(view.step.id) ? pendingOffer(session.state.character) : undefined;
+  // A boss battle: on its Clash wheels, or on its fight's wheel once decided. A landed blow shows at once.
+  const clashLanded = landed && outcome && isBattleStep(outcome.step.id) ? outcome : null;
+  const battle = (clashLanded ? clashLanded.state.battle : session.state.battle) ?? null;
+  const onClash = !!view.step && isBattleStep(view.step.id);
+  const showBattle = battle !== null && (onClash || (battle.verdict !== undefined && view.step?.id === battle.stepId));
+  const blow = clashLanded ? (battle?.last ?? null) : session.phase === 'ready' && battle?.last?.cast ? battle.last : null;
+  const cascade = clashLanded && session.phase === 'revealing' && blow?.cascade ? blow : null;
+  const mode = spellModeOf(config, session.state);
+  // A Gambler's coin or a Trickster's gambit plays over the wheel just rolled: the hall keeps showing that one.
+  const backdrop = sideBetBackdrop(session, view.step, hero.rules);
+  const hallStep = backdrop?.step ?? view.step;
+  const hasPanels = Boolean(view.character.expedition || view.character.story || (cast && !view.step?.foe) || (showBattle && battle) || view.step?.foe);
+  // What this wheel is about, which changes from wheel to wheel: beside the wheel on a wide screen (in the
+  // page's right-hand column, over the hero's card), below it on a phone. Never above it: the wheel holds still.
+  const panelList = (
+    <>
+        {view.character.expedition && <ExpeditionBanner config={config} expedition={view.character.expedition} />}
+        {view.character.story && <QuestPanel story={view.character.story} hero={view.character} config={config} />}
+        {cast && !view.step?.foe && <CastBanner config={config} cast={cast} />}
+        {showBattle && battle ? (
+          <BattleHUD
+            config={config}
+            hero={clashLanded ? clashLanded.state.character : hero}
+            battle={battle}
+            event={blow}
+            eventKey={`${session.spinCount}-${battle.round}-${battle.stats.casts}`}
+            mode={mode}
+            onModeChange={adventure.setSpellMode}
+          />
+        ) : (
+          view.step?.foe && <Duel hero={hero} step={view.step} foe={view.step.foe} castFoe={cast} />
+        )}
+        {onClash && battle && mode === 'choose' && session.phase === 'ready' && (
+          <SpellBar config={config} hero={hero} battle={battle} disabled={session.phase !== 'ready'} onCast={adventure.cast} />
+        )}
+    </>
+  );
+  const sidePanels = hasPanels ? <div className="flex flex-col gap-4 *:mt-0!">{panelList}</div> : null;
 
   return (
     <>
+      {/* What this wheel is, then what is at stake on it. The block keeps its height, so the wheel holds still. */}
+      <div className="flex min-h-[11.5rem] flex-col sm:min-h-[13.75rem]">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm text-ash">
@@ -64,43 +138,80 @@ export function AdventureTab({ config, world, hero: living, adventure, onCreateH
             {hero.fame} fame
             {earned !== 0 && <span className={earned > 0 ? 'text-moss' : 'text-ember'}> ({signed(earned)} on this road)</span>}
           </p>
-          <h1 id="wheel-title" className="court-title mt-1 text-4xl leading-none sm:text-5xl">
-            {view.step?.title ?? 'The road'}
-          </h1>
-          {view.step?.subtitle && <p className="mt-2 text-lg text-ash">{view.step.subtitle}</p>}
+          <WheelTitle
+            title={hallStep?.title ?? 'The road'}
+            subtitle={hallStep?.subtitle}
+            className="court-title mt-1 line-clamp-2 text-3xl leading-none sm:text-5xl"
+          />
         </div>
-        <MeterBars config={config} character={view.character} className="shrink-0 pt-1" />
+        <MeterBars config={config} character={view.character} className="shrink-0 pt-1" hideHealth />
       </div>
-      {view.character.expedition && <ExpeditionBanner config={config} expedition={view.character.expedition} />}
-      {view.character.story && <QuestPanel story={view.character.story} hero={view.character} config={config} />}
-      {cast && !view.step?.foe && <CastBanner config={config} cast={cast} />}
-      {view.step?.foe && <Duel hero={hero} step={view.step} foe={view.step.foe} castFoe={cast} />}
+      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+        <HealthGauge
+          character={view.character}
+          className="min-w-0 max-w-xl flex-1 basis-60"
+          {...(showBattle && battle && { fraction: heroUnits(battle) / BATTLE_POOL })}
+        />
+        {/* On a phone the battle panel is below the wheel: the foe's health comes up here, beside theirs. */}
+        {showBattle && battle && <FoeGauge battle={battle} className="min-w-0 flex-1 basis-40 lg:hidden" />}
+      </div>
+      </div>
+      <ClashAdvance active={session.phase === 'revealing' && clashLanded !== null && cascade === null} onNext={adventure.next} />
 
-      <div className="mt-8">
+      <div className="relative mt-2">
+        <AnimatePresence>
+          {cascade?.cascade && config.battle && (
+            <CritCascade
+              key={`cascade-${session.spinCount}`}
+              config={config.battle}
+              cascade={cascade.cascade}
+              foe={cascade.kind === 'foe_crit'}
+              base={Math.round(((cascade.kind === 'foe_crit' ? cascade.toHero : cascade.toFoe) / (cascade.mult ?? 1)) * (cascade.kind === 'foe_crit' ? (battle?.scale.hero ?? 1) : FOE_HP_PER_UNIT))}
+              total={Math.round((cascade.kind === 'foe_crit' ? cascade.toHero : cascade.toFoe) * (cascade.kind === 'foe_crit' ? (battle?.scale.hero ?? 1) : FOE_HP_PER_UNIT))}
+              onDone={adventure.next}
+            />
+          )}
+        </AnimatePresence>
         {view.step?.choice ? (
           <>
-            <p className="mb-3 text-sm text-ash">Your decision. Each choice says what it gives, what it risks, and whether a wheel decides how it goes.</p>
+            {offer ? (
+              <div className="mb-4">
+                <GearCompare offer={offer} character={session.state.character} config={config} />
+              </div>
+            ) : (
+              <p className="mb-3 text-sm text-ash">Your decision. Each choice says what it gives, what it risks, and whether a wheel decides how it goes.</p>
+            )}
             <ChoicePanel
               slices={view.slices}
               config={config}
               chosenIndex={landed ? view.winnerIndex : null}
               disabled={session.phase !== 'ready'}
               onChoose={adventure.choose}
+              {...(offer && { thenLabel: 'Then: the road goes on' })}
             />
           </>
         ) : (
-          <SpinWheel
-            slices={view.slices}
-            spin={adventure.spinRequest}
-            highlightIndex={landed ? view.winnerIndex : null}
-            canSpin={view.canSpin}
-            onSpinRequest={adventure.spin}
+          <FateWheels
+            view={view}
+            phase={session.phase}
+            character={session.state.character}
+            step={view.step}
+            spinRequest={adventure.spinRequest}
+            altSpinRequest={adventure.altSpinRequest}
+            onSpin={adventure.spin}
             onSettled={adventure.settle}
+            onSettledAlt={adventure.settleAlt}
+            onPick={adventure.pick}
+            onSmash={adventure.smash}
+            onDecree={adventure.decree}
             label={view.step?.title ?? 'Adventure wheel'}
-            golden={view.step?.golden}
+            {...(onClash && { spinMs: CLASH_SPIN_MS, hubLabel: 'Fight' })}
+            onAdvance={adventure.next}
+            backdrop={backdrop}
           />
         )}
       </div>
+      {sidePanels && (wide && sideSlot ? createPortal(sidePanels, sideSlot) : <div className="mt-6">{sidePanels}</div>)}
 
       {adventure.error && (
         <p role="alert" className="mt-4 text-ember">
@@ -113,8 +224,8 @@ export function AdventureTab({ config, world, hero: living, adventure, onCreateH
           {session.phase === 'revealing' && winner ? `Rolled ${winner.option.label}.` : ''}
         </p>
         <AnimatePresence mode="wait" initial={false}>
-          {session.phase === 'revealing' && outcome && (
-            <motion.div key={`reveal-${outcome.step.id}-${outcome.state.stepsTaken}`} {...enter}>
+          {session.phase === 'revealing' && outcome && !clashLanded && !isSideBet(outcome.step, hero.rules) && (
+            <RevealPopup key={`reveal-${outcome.step.id}-${outcome.state.stepsTaken}`} jackpot={jackpotColor(outcome)}>
               <OutcomeCard
                 outcome={outcome}
                 config={config}
@@ -129,7 +240,7 @@ export function AdventureTab({ config, world, hero: living, adventure, onCreateH
                 callback={roll?.callback}
                 event={roll?.event}
               />
-            </motion.div>
+            </RevealPopup>
           )}
           {session.phase === 'complete' && (
             <motion.div key="complete" {...enter}>
@@ -160,10 +271,10 @@ export function AdventureTab({ config, world, hero: living, adventure, onCreateH
           <h2 className="text-sm text-ash">Odds on this wheel</h2>
           <div className="mt-3">
             <OddsList
-              slices={view.slices}
-              winnerIndex={landed ? view.winnerIndex : null}
-              title={view.step.title}
-              stepId={view.step.id}
+              slices={backdrop?.slices ?? view.slices}
+              winnerIndex={backdrop ? backdrop.winnerIndex : landed ? view.winnerIndex : null}
+              title={backdrop?.step.title ?? view.step.title}
+              stepId={backdrop?.step.id ?? view.step.id}
               config={config}
               character={session.state.character}
               world={world}
@@ -173,6 +284,36 @@ export function AdventureTab({ config, world, hero: living, adventure, onCreateH
       )}
     </>
   );
+}
+
+/** The foe's health, compact, for the header on a phone: its name, a bar, the numbers. */
+function FoeGauge({ battle, className = '' }: { battle: BattleState; className?: string }) {
+  const max = foeMaxHp(battle);
+  const hp = Math.round(battle.foeHp * FOE_HP_PER_UNIT);
+  const pct = `${Math.max(0, Math.min(100, (battle.foeHp / poolsOf(battle).foe) * 100))}%`;
+  return (
+    <div className={`flex items-center gap-2 ${className}`} role="meter" aria-label={`${battle.foe.name}'s health`} aria-valuemin={0} aria-valuemax={max} aria-valuenow={hp}>
+      <span className="max-w-[7rem] shrink-0 truncate font-caps text-sm text-ember">{battle.foe.name}</span>
+      <span className="relative h-3 min-w-0 flex-1 overflow-hidden border-2 border-gilt-deep bg-[#120b09]">
+        <motion.span className="absolute inset-y-0 right-0 block bg-[linear-gradient(180deg,#ff9a7a,#b52a3c)]" initial={false} animate={{ width: pct }} transition={{ duration: 0.3 }} />
+      </span>
+      <span className="shrink-0 text-xs font-semibold tabular-nums text-vellum">
+        {hp}
+        <span className="font-normal text-ash"> / {max}</span>
+      </span>
+    </div>
+  );
+}
+
+/** On a battle's Clash wheel: once a blow has landed and shown, the next round comes up by itself. */
+function ClashAdvance({ active, onNext }: { active: boolean; onNext: () => void }) {
+  const { wheelSpeed } = useSettings();
+  useEffect(() => {
+    if (!active) return;
+    const timer = setTimeout(onNext, pauseDuration(CLASH_LINGER_MS, wheelSpeed));
+    return () => clearTimeout(timer);
+  }, [active, onNext, wheelSpeed]);
+  return null;
 }
 
 /** A character from the world, featured on this wheel: a retired legend, a grave, a ruler. */
@@ -231,12 +372,31 @@ function Duel({ hero, step, foe, castFoe }: { hero: Character; step: WheelStep; 
         <span className="font-semibold text-moss">{formatPercent(win)}</span> to win, from power against power. The
         wheel’s win and defeat slices are drawn at these odds. The stronger the foe, the more fame a win is worth.
       </p>
+      <MatchupLine hero={hero} foe={foe} />
       {castFoe && (
         <p className="mt-1 text-sm text-ember">
           {castFoe.name} once rode as a hero. Now: {roleLabel(castFoe).toLowerCase()}.
         </p>
       )}
     </div>
+  );
+}
+
+/** How the hero's weapon meets the foe, and whether their armour turns its blows: already in the odds above. */
+function MatchupLine({ hero, foe }: { hero: Character; foe: Foe }) {
+  const m = describeMatchup(hero, foe);
+  if (m.matchup === 'neutral' && !m.turned) return null;
+  const hit = { weak: 'WEAK! ×1.3', resisted: 'Resisted ×0.75', immune: 'Immune ×0.5', neutral: '' }[m.matchup];
+  return (
+    <p className="mt-1 text-sm">
+      {m.matchup !== 'neutral' && (
+        <span className={m.matchup === 'weak' ? 'font-semibold text-gilt-bright' : 'text-ember'}>
+          Their {m.damage}: {hit}
+        </span>
+      )}
+      {m.matchup !== 'neutral' && m.turned && <span className="text-ash"> · </span>}
+      {m.turned && <span className="text-[#739ddb]">Their armour turns its {m.strikes} (×1.15)</span>}
+    </p>
   );
 }
 
@@ -284,7 +444,7 @@ function HeroHome({ config, world, hero, error, onEmbark, onCreateHero }: HeroHo
           </button>
         </div>
       ) : (
-        <div className="mt-8 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 court-panel px-5 py-4">
+        <div className="mt-8 grid grid-cols-1 items-center gap-x-4 gap-y-3 court-panel px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="min-w-0">
             <p className="truncate font-display text-2xl leading-tight text-candle">{hero.name}</p>
             {hero.title && <p className="truncate text-sm text-gilt-bright">{hero.title}</p>}
@@ -295,10 +455,11 @@ function HeroHome({ config, world, hero, error, onEmbark, onCreateHero }: HeroHo
               {done === 0 ? 'Never left home.' : `${done} adventure${done === 1 ? '' : 's'} behind them.`}
             </p>
             <FameMeter config={config} fame={hero.fame} />
+            <HealthGauge character={hero} className="mt-3" unframed />
             <UnfinishedBusiness config={config} character={hero} />
           </div>
           <div className="flex items-end gap-4">
-            <MeterBars config={config} character={hero} />
+            <MeterBars config={config} character={hero} hideHealth />
           <button type="button" onClick={() => onEmbark(hero)} className={`${primaryButton} flex items-center gap-2`} autoFocus>
             <Footprints aria-hidden="true" size={16} />
             Set out

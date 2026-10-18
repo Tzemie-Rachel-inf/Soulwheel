@@ -10,12 +10,12 @@
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { EngineError } from '../engine/errors';
-import { spinCurrentStep } from '../engine/generation';
+import { chooseCurrentStep, decideCurrentStep, spinCurrentStep } from '../engine/generation';
 import { asHeir } from '../engine/lineage';
 import { defaultRng, seededFrom, type Rng } from '../engine/rng';
 import type { Character, GameConfig, World } from '../engine/types';
 import type { SpinRequest, UpgradeRequest } from '../ui/wheel/SpinWheel';
-import { advance, createSession, finishUpgrade, settleSpin, startSpin, viewSession } from './generationSession';
+import { advance, createSession, finishUpgrade, pickSpin, settleSpin, smashSpin, startSpin, viewSession, type Side } from './generationSession';
 
 /** How a new soul begins, beyond chance: from a seed, or as someone's heir. */
 export interface SoulStart {
@@ -53,6 +53,12 @@ export function useCharacterGeneration(config: GameConfig, world: World) {
         : null,
     [session.phase, session.spinCount, pending],
   );
+  /** A Wise soul's second wheel: the same spin, its own target. */
+  const right = session.wise?.right;
+  const altSpinRequest = useMemo<SpinRequest | null>(
+    () => (session.phase === 'spinning' && right ? { id: session.spinCount, targetIndex: right.roll.winner.index } : null),
+    [session.phase, session.spinCount, right],
+  );
 
   /** The bump the wheel plays after landing, while `upgrading`. Same object for the whole bump. */
   const upgradeRequest = useMemo<UpgradeRequest | null>(
@@ -76,17 +82,58 @@ export function useCharacterGeneration(config: GameConfig, world: World) {
       setError(null);
       setSession((s) => startSpin(s, outcome));
     } catch (err) {
-      setError(
-        err instanceof EngineError && err.code === 'NO_ELIGIBLE_OPTIONS'
-          ? 'Every slice on this wheel is locked. Change the world, or give this wheel an option with no conditions.'
-          : err instanceof Error
-            ? err.message
-            : String(err),
-      );
+      setError(describe(err));
     }
   }, [session, config, world]);
 
+  /** A decision on a choice wheel (Keep or Take): no spin, the chosen option is revealed at once. */
+  const choose = useCallback(
+    (optionId: string) => {
+      if (session.phase !== 'ready') return;
+      try {
+        const outcome = chooseCurrentStep(session.state, config, world, optionId, rng.current);
+        setError(null);
+        setSession((s) => settleSpin(startSpin(s, outcome), s.spinCount + 1));
+      } catch (err) {
+        setError(describe(err));
+      }
+    },
+    [session, config, world],
+  );
+
+  /** An Ancient's decree: the wheel turns to the slice they named. */
+  const decree = useCallback(
+    (index: number) => {
+      if (session.phase !== 'ready') return;
+      try {
+        const outcome = decideCurrentStep(session.state, config, world, index, 'decree', rng.current);
+        setError(null);
+        setSession((s) => startSpin(s, outcome));
+      } catch (err) {
+        setError(describe(err));
+      }
+    },
+    [session, config, world],
+  );
+
+  /** A Brute's Smash: the wheel stopped dead on slice `index`, and that is the roll. */
+  const smash = useCallback(
+    (spinId: number, index: number) => {
+      if (session.phase !== 'spinning' || spinId !== session.spinCount) return;
+      try {
+        const outcome = decideCurrentStep(session.state, config, world, index, 'smash', rng.current);
+        setSession((s) => smashSpin(s, spinId, outcome));
+      } catch (err) {
+        setError(describe(err));
+      }
+    },
+    [session, config, world],
+  );
+
   const settle = useCallback((spinId: number) => setSession((s) => settleSpin(s, spinId)), []);
+  const settleAlt = useCallback((spinId: number) => setSession((s) => settleSpin(s, spinId, 'right')), []);
+  /** A Wise soul keeps one of their two rolls. */
+  const pick = useCallback((side: Side) => setSession((s) => pickSpin(s, side)), []);
   const upgraded = useCallback((spinId: number) => setSession((s) => finishUpgrade(s, spinId)), []);
   const next = useCallback(() => setSession(advance), []);
   /** A new soul: by chance, from a seed, or as someone's heir. */
@@ -99,5 +146,12 @@ export function useCharacterGeneration(config: GameConfig, world: World) {
     [config],
   );
 
-  return { session, view, spinRequest, upgradeRequest, error, spin, settle, upgraded, next, restart };
+  return { session, view, spinRequest, altSpinRequest, upgradeRequest, error, spin, choose, decree, smash, settle, settleAlt, pick, upgraded, next, restart };
+}
+
+function describe(err: unknown): string {
+  if (err instanceof EngineError && err.code === 'NO_ELIGIBLE_OPTIONS') {
+    return 'Every slice on this wheel is locked. Change the world, or give this wheel an option with no conditions.';
+  }
+  return err instanceof Error ? err.message : String(err);
 }

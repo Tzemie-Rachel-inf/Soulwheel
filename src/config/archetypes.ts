@@ -1,155 +1,335 @@
 /**
- * Archetypes: what a soul is trained (or born) to be, rolled right after their race's
- * wheels. Each banks a little toward its stats, some owe a power spin (a Mage an arcane
- * power, a Cleric a blessed one, a Warlock or Necromancer a corrupted one), and every
- * archetype bends later wheels through `odds`: a Mage finds staves, a Ranger bows, a
- * Warrior trains Might, and each favours different pursuits at the crossroads.
+ * Archetypes: not what a soul is trained to do, but how fate treats them. Rolled right after
+ * their race's wheels, each one changes the act of spinning itself (`rules`, read by
+ * engine/archetypes.ts):
  *
- * Races lean toward archetypes in their own `odds.archetype` (races.ts).
+ *   Wise (common)          every wheel is spun twice, side by side; they keep the result they prefer
+ *   Gambler (common)       every gain is bet on a coin: doubled, or lost (a stat set by a wheel falls to 1); a rare jackpot triples it
+ *   All-Rounder (common)   the first stat wheel sets every stat (each still gets its own banked bonus)
+ *   Assassin (uncommon)    weapons with Agility only; armour worn with Vitality or Agility, whichever is better
+ *   Realist (uncommon)     the lowest and highest options are cut from every wheel
+ *   Dreamer (rare)         every wheel gains a Nightmare below its worst and a Miracle above its best
+ *   Trickster (rare)       a wheel before every battle doubles their power, halves it, or worse, or better
+ *   Martial (rare)         a wheel that would teach a spell is a training wheel instead; Arcana is always 0
+ *   Archmage (rare)        no weapon can be held; spells are worth double
+ *   Vessel (epic)          host to something vast (a god, a dragon, a thing from beyond), and how far it has taken them
+ *   Brute (epic)           a Smash button stops the spinning wheel dead, wherever it is
+ *   Broken (epic)          one to three slices vanish from every wheel
+ *   Hero (legendary)       the Holy Sword looks for them; holy slices pull at the wheel; death misses 1 time in 10
+ *   Ancient (legendary)    once in a life, they decide a roll instead of spinning it
+ *   Transcendent (mythical) the odds of every rarity are swapped with its mirror: common for mythical, and so on
+ *
+ * The Gambler's coin, the Trickster's gambit and Martial training are this file's own wheels.
  */
-import type { Archetype, WheelStep } from '../engine/types';
+import type { Archetype, Trait, WheelOption, WheelStep } from '../engine/types';
+import { POWER_WHEELS, POWERS_ROUTE } from './powers';
+
+export const GAMBLE_STEP = 'gamble';
+export const TRICKSTER_STEP = 'trickster_gambit';
+export const MARTIAL_STEP = 'martial_training';
+const VESSEL_STEP = 'vessel_of';
+const ASSIMILATION_STEP = 'vessel_assimilation';
 
 export const ARCHETYPES = {
-  warrior: {
-    id: 'warrior',
-    name: 'Warrior',
-    description: 'Steel, shield and stubbornness.',
-    odds: {
-      armory: { war_axe: 1.6, rusted_shortsword: 1.4, greatsword: 2, iron_mace: 1.4, empty_hands: 0.7 },
-      talents: { blademaster: 2 },
-      train_stat: { might: 2.5 },
-      crossroads: { train: 1.6, tournament: 2, war: 2 },
-    },
+  wise: {
+    id: 'wise',
+    name: 'Wise',
+    rarity: 'common',
+    description: 'Every wheel turns twice for them, and they choose which fate to keep.',
+    rules: { rollTwice: true },
   },
-  rogue: {
-    id: 'rogue',
-    name: 'Rogue',
-    description: 'Quick hands, quiet feet, and a knife for every problem.',
-    odds: {
-      armory: { rusted_shortsword: 1.3, twin_daggers: 3, crossbow: 1.5 },
-      talents: { shadowstep: 2.5 },
-      train_stat: { agility: 2.5 },
-      crossroads: { treasure: 2, hunt: 1.6, hidden_place: 1.6 },
-    },
+  gambler: {
+    id: 'gambler',
+    name: 'Gambler',
+    rarity: 'common',
+    description: 'Every gain goes back on the table: double it, or lose it all.',
+    rules: { gamble: GAMBLE_STEP },
   },
-  ranger: {
-    id: 'ranger',
-    name: 'Ranger',
-    description: 'At home where the roads run out.',
-    odds: {
-      armory: { hunters_longbow: 3, crossbow: 2, hunting_spear: 1.5, stormbow: 1.5 },
-      train_stat: { agility: 1.6, vitality: 1.4 },
-      crossroads: { hunt: 2, tame_beast: 2.5, explore: 1.6 },
-    },
+  all_rounder: {
+    id: 'all_rounder',
+    name: 'All-Rounder',
+    rarity: 'common',
+    description: 'One stat wheel decides them all. Never the best at anything; never the worst.',
+    rules: { uniformStats: true },
   },
-  mage: {
-    id: 'mage',
-    name: 'Mage',
-    description: 'Years of study, one very loud spell.',
-    odds: {
-      armory: { runed_staff: 3, apprentice_wand: 3, war_axe: 0.5, greatsword: 0.5 },
-      talents: { arcane_savant: 2, archmage: 2 },
-      train_stat: { arcana: 2.5, intellect: 1.6 },
-      crossroads: { research: 2, study: 2, learn_power: 2.5 },
-    },
+  assassin: {
+    id: 'assassin',
+    name: 'Assassin',
+    rarity: 'uncommon',
+    description: 'Weapons in quick hands only (Agility), and armour worn light: Vitality or Agility, whichever is better.',
+    odds: { armory: { twin_daggers: 3, duelist_rapier: 2, crossbow: 1.5 }, talents: { shadowstep: 2.5 } },
+    rules: { weaponStat: 'agility', armorStats: ['vitality', 'agility'] },
   },
-  cleric: {
-    id: 'cleric',
-    name: 'Cleric',
-    description: 'Prayers that get answered, sometimes loudly.',
-    odds: {
-      armory: { runed_staff: 1.5, iron_mace: 2.5, warhammer: 1.5 },
-      train_stat: { arcana: 1.6, vitality: 1.6 },
-      crossroads: { learn_power: 1.8, mentor: 1.4 },
-    },
+  realist: {
+    id: 'realist',
+    name: 'Realist',
+    rarity: 'uncommon',
+    description: 'No miracles, no catastrophes. The best and worst slices of every wheel are cut away.',
+    rules: { trimExtremes: true },
   },
-  paladin: {
-    id: 'paladin',
-    name: 'Paladin',
-    description: 'An oath, a sword, and no patience for evil.',
-    odds: {
-      armory: { war_axe: 1.3, warhammer: 2, greatsword: 1.6 },
-      talents: { holy_sword: 2.5 },
-      train_stat: { might: 1.6, vitality: 1.6 },
-      crossroads: { war: 1.8, challenge: 1.6 },
-    },
+  dreamer: {
+    id: 'dreamer',
+    name: 'Dreamer',
+    rarity: 'rare',
+    description: 'Every wheel holds a Nightmare below its worst and a Miracle above its best.',
+    rules: { dreamTiers: true },
   },
-  barbarian: {
-    id: 'barbarian',
-    name: 'Barbarian',
-    description: 'Rage first. Rage second. Thinking eventually.',
-    odds: {
-      armory: { war_axe: 2.2, greatsword: 2, obsidian_glaive: 1.5, empty_hands: 1.2 },
-      talents: { unbreakable: 2 },
-      train_stat: { might: 3 },
-      crossroads: { war: 2, challenge: 2, study: 0.4 },
-    },
+  trickster: {
+    id: 'trickster',
+    name: 'Trickster',
+    rarity: 'rare',
+    description: 'Before every battle, fate shuffles the deck: their power doubled, halved, or stranger.',
+    rules: { beforeFight: TRICKSTER_STEP },
   },
-  bard: {
-    id: 'bard',
-    name: 'Bard',
-    description: 'Every legend needs someone to sing it. Ideally themselves.',
-    odds: { armory: { duelist_rapier: 2.5 }, train_stat: { intellect: 1.6, agility: 1.4 }, crossroads: { make_ally: 2, tournament: 1.6 } },
+  martial: {
+    id: 'martial',
+    name: 'Martial',
+    rarity: 'rare',
+    description: 'Magic slides off them. Every spell they would learn is a season of training instead. Arcana: 0.',
+    rules: { replaceSteps: { steps: Object.values(POWER_WHEELS), with: MARTIAL_STEP }, fixedStats: { arcana: 0 } },
   },
-  druid: {
-    id: 'druid',
-    name: 'Druid',
-    description: 'Speaks for the forest, and the forest has opinions.',
-    odds: { train_stat: { arcana: 1.6, vitality: 1.4 }, crossroads: { tame_beast: 2.5, transform: 2 } },
+  archmage: {
+    id: 'archmage',
+    name: 'Archmage',
+    rarity: 'rare',
+    description: 'Their hands are for casting. No weapon, ever; every spell worth double.',
+    odds: { crossroads: { learn_power: 2, research: 1.5 } },
+    rules: { noWeapon: true, spellMultiplier: 2 },
   },
-  monk: {
-    id: 'monk',
-    name: 'Monk',
-    description: 'Empty hands, full discipline.',
-    odds: {
-      armory: { empty_hands: 2.5 },
-      train_stat: { agility: 2, vitality: 1.4 },
-      crossroads: { train: 2, master_power: 2 },
-    },
+  vessel: {
+    id: 'vessel',
+    name: 'Vessel',
+    rarity: 'epic',
+    description: 'Something vast lives inside them. Its power is theirs, as far as it lets them have it.',
+    rules: {},
   },
-  warlock: {
-    id: 'warlock',
-    name: 'Warlock',
-    description: 'Power on loan from something that will collect.',
-    odds: { armory: { apprentice_wand: 2 }, train_stat: { arcana: 2.5 }, crossroads: { learn_power: 2, make_enemy: 1.6 } },
+  brute: {
+    id: 'brute',
+    name: 'Brute',
+    rarity: 'epic',
+    description: 'They don’t wait for the wheel to slow down. They hit it.',
+    rules: { smash: true },
   },
-  artificer: {
-    id: 'artificer',
-    name: 'Artificer',
-    description: 'If it doesn’t exist yet, they’ll build it by Tuesday.',
-    odds: { armory: { crossbow: 2.5 }, train_stat: { intellect: 2.5 }, crossroads: { craft: 3, research: 1.6 } },
+  broken: {
+    id: 'broken',
+    name: 'Broken',
+    rarity: 'epic',
+    description: 'Fate has cracks in it. Every wheel they face is missing pieces.',
+    rules: { shatter: true },
   },
-  necromancer: {
-    id: 'necromancer',
-    name: 'Necromancer',
-    description: 'Death is a resource. A renewable one.',
-    odds: {
-      talents: { echoes: 2.5 },
-      train_stat: { arcana: 2, intellect: 1.6 },
-      crossroads: { research: 2, learn_power: 2 },
-    },
+  hero: {
+    id: 'hero',
+    name: 'Hero',
+    rarity: 'legendary',
+    description: 'The Holy Sword looks for them. Holy things pull at their wheels, and death misses one time in ten.',
+    odds: { talents: { holy_sword: 12 } },
+    rules: { holyPull: 1.3, deathSave: 0.1 },
+  },
+  ancient: {
+    id: 'ancient',
+    name: 'Ancient',
+    rarity: 'legendary',
+    description: 'Older than the wheels. Once in this life, they decide a roll instead of spinning it.',
+    rules: { decrees: 1 },
+  },
+  transcendent: {
+    id: 'transcendent',
+    name: 'Transcendent',
+    rarity: 'mythical',
+    description: 'Fate turned inside out: the commonest outcomes are their rarest, and the impossible is ordinary.',
+    rules: { mirrorRarity: true },
   },
 } satisfies Record<string, Archetype>;
 
-const archetype = (id: keyof typeof ARCHETYPES) => ({ setArchetype: id, description: ARCHETYPES[id].description, nextStepId: 'fate' });
+type ArchetypeId = keyof typeof ARCHETYPES;
+
+const WEIGHTS: Record<Archetype['rarity'], number> = { common: 16, uncommon: 9, rare: 4, epic: 1.8, legendary: 0.7, mythical: 0.25 };
+
+const LOOK: Record<ArchetypeId, { color: string; icon: string; priority: number }> = {
+  wise: { color: '#4f6a9a', icon: 'BookOpen', priority: 16 },
+  gambler: { color: '#9a3a4a', icon: 'Dices', priority: 16 },
+  all_rounder: { color: '#6a7a5a', icon: 'Scale', priority: 16 },
+  assassin: { color: '#3a3a4e', icon: 'VenetianMask', priority: 20 },
+  realist: { color: '#7a7064', icon: 'Search', priority: 18 },
+  dreamer: { color: '#7a5ad0', icon: 'MoonStar', priority: 24 },
+  trickster: { color: '#c0569a', icon: 'Shuffle', priority: 24 },
+  martial: { color: '#b8613a', icon: 'Hand', priority: 24 },
+  archmage: { color: '#3a5ae0', icon: 'WandSparkles', priority: 26 },
+  vessel: { color: '#2f5a4a', icon: 'Ghost', priority: 34 },
+  brute: { color: '#8a2e2e', icon: 'Hammer', priority: 30 },
+  broken: { color: '#4a3a3a', icon: 'HeartCrack', priority: 30 },
+  hero: { color: '#facc15', icon: 'Sword', priority: 44 },
+  ancient: { color: '#c9a24c', icon: 'Hourglass', priority: 44 },
+  transcendent: { color: '#fff4c2', icon: 'Orbit', priority: 60 },
+};
+
+const archetypeOption = (id: ArchetypeId): WheelOption => {
+  const a: Archetype = ARCHETYPES[id];
+  return {
+    id,
+    label: a.name,
+    description: a.description,
+    baseWeight: WEIGHTS[a.rarity],
+    rarity: a.rarity,
+    setArchetype: id,
+    epithet: { text: `the ${a.name}`, priority: LOOK[id].priority },
+    // An Archmage starts out knowing one spell.
+    ...(id === 'archmage' && { queueSpins: { [POWER_WHEELS.arcane]: 1 } }),
+    nextStepId: id === 'vessel' ? VESSEL_STEP : 'fate',
+    color: LOOK[id].color,
+    icon: LOOK[id].icon,
+  };
+};
 
 export const ARCHETYPE: WheelStep = {
   id: 'archetype',
   title: 'Wheel of Archetypes',
-  subtitle: 'What were you made for?',
+  subtitle: 'Not what you do. How fate treats you.',
+  options: (Object.keys(ARCHETYPES) as ArchetypeId[]).map(archetypeOption),
+};
+
+// ─── Vessel: what lives inside them, and how much of them is left ───────────
+
+interface Host {
+  id: string;
+  label: string;
+  description: string;
+  weight: number;
+  rarity: NonNullable<WheelOption['rarity']>;
+  trait: Omit<Trait, 'id'>;
+  bonus: WheelOption['statBonus'];
+  luck?: number;
+  tags?: string[];
+  holy?: boolean;
+  color: string;
+  icon: string;
+}
+
+const HOSTS: Host[] = [
+  { id: 'beast', label: 'A Great Beast', description: 'The spirit of something that hunted before there were people.', weight: 22, rarity: 'common', trait: { name: 'Beast Within', description: 'Claws behind the eyes.', power: 20, scalesWith: ['might', 'agility'] }, bonus: { might: 1, agility: 1 }, color: '#7a5a3a', icon: 'PawPrint' },
+  { id: 'ancestor', label: 'A Restless Ancestor', description: 'Great-great-grandmother never really left.', weight: 18, rarity: 'common', trait: { name: 'Ancestor’s Voice', description: 'Advice from the grave, mostly good.', power: 15 }, bonus: { intellect: 1, vitality: 1 }, luck: 0.25, color: '#6a7a8a', icon: 'Ghost' },
+  { id: 'storm', label: 'A Storm Elemental', description: 'Thunder where the heartbeat should be.', weight: 14, rarity: 'uncommon', trait: { name: 'Living Storm', description: 'Lightning answers when they are angry.', power: 30, scalesWith: ['agility'] }, bonus: { agility: 1, arcana: 1 }, color: '#5a8ab8', icon: 'CloudLightning' },
+  { id: 'archfey', label: 'An Archfey', description: 'A noble of the hollow hills, bored and curious.', weight: 12, rarity: 'uncommon', trait: { name: 'Fey Court', description: 'Glamours and bargains.', power: 30, scalesWith: ['intellect'] }, bonus: { agility: 1, intellect: 1 }, luck: 0.5, color: '#9ac46a', icon: 'Flower' },
+  { id: 'demon', label: 'A Demon Prince', description: 'Bound inside them, and always negotiating.', weight: 8, rarity: 'rare', trait: { name: 'Demon Within', description: 'Hellfire, on loan.', power: 45, scalesWith: ['might'] }, bonus: { might: 2, arcana: 1 }, tags: ['corrupted'], color: '#8a1c2e', icon: 'Flame' },
+  { id: 'dragon', label: 'An Elder Dragon', description: 'A dragon’s soul, too proud to die properly.', weight: 7, rarity: 'rare', trait: { name: 'Dragon Soul', description: 'Scales under the skin; fire under the scales.', power: 50, scalesWith: ['vitality'] }, bonus: { might: 2, vitality: 2 }, color: '#b8323a', icon: 'Flame' },
+  { id: 'titan', label: 'A Sleeping Titan', description: 'It dreams of mountains. They carry the weight.', weight: 3, rarity: 'epic', trait: { name: 'Titan’s Dream', description: 'Strength from before the world.', power: 60, scalesWith: ['might'] }, bonus: { might: 3, vitality: 3 }, color: '#7a6a5a', icon: 'Mountain' },
+  { id: 'eldritch', label: 'Something From Beyond', description: 'It has no name in any language with vowels.', weight: 3, rarity: 'epic', trait: { name: 'The Thing Beyond', description: 'Geometry that hurts.', power: 70, scalesWith: ['intellect'] }, bonus: { arcana: 3, intellect: 2 }, luck: -0.25, color: '#2a3a4f', icon: 'Eye' },
+  { id: 'god', label: 'A Forgotten God', description: 'No temples left. One worshipper, and they live inside them.', weight: 1.2, rarity: 'legendary', trait: { name: 'Forgotten God', description: 'Divinity, slightly used.', power: 90, multiplier: 1.2 }, bonus: { might: 2, agility: 2, intellect: 2, arcana: 2, vitality: 2 }, luck: 0.5, holy: true, color: '#ffd76a', icon: 'Sun' },
+  { id: 'primordial', label: 'A Primordial', description: 'The first thing. Before light, before the gods. It fits inside them, somehow.', weight: 0.3, rarity: 'mythical', trait: { name: 'The Primordial', description: 'Creation, held in one body.', power: 150, multiplier: 1.5 }, bonus: { might: 3, agility: 3, intellect: 3, arcana: 3, vitality: 3 }, color: '#fff4c2', icon: 'Orbit' },
+];
+
+const hostTraitId = (host: Host) => `vessel_${host.id}`;
+
+export const VESSEL_TRAITS: Record<string, Trait> = Object.fromEntries(HOSTS.map((h) => [hostTraitId(h), { id: hostTraitId(h), ...h.trait }]));
+
+/** Epithet priority per rarity, so a rarer host outranks a commoner one. */
+const RARITY_STEP: Record<NonNullable<WheelOption['rarity']>, number> = { common: 0, uncommon: 6, rare: 14, epic: 24, legendary: 40, mythical: 56 };
+
+const VESSEL: WheelStep = {
+  id: VESSEL_STEP,
+  title: 'Vessel of…',
+  subtitle: 'Something lives inside you. What?',
+  options: HOSTS.map((h) => ({
+    id: h.id,
+    label: h.label,
+    description: h.description,
+    baseWeight: h.weight,
+    rarity: h.rarity,
+    grantTraits: [hostTraitId(h)],
+    statBonus: h.bonus,
+    ...(h.luck && { luckDelta: h.luck }),
+    ...(h.tags && { grantTags: h.tags }),
+    ...(h.holy && { holy: true }),
+    epithet: { text: `Vessel of ${h.label.replace(/^An? /, '')}`, priority: 30 + RARITY_STEP[h.rarity] },
+    nextStepId: ASSIMILATION_STEP,
+    color: h.color,
+    icon: h.icon,
+  })),
+};
+
+const ASSIMILATION: WheelStep = {
+  id: ASSIMILATION_STEP,
+  title: 'Assimilation',
+  subtitle: 'How much of it has become them, and how much of them is still in charge?',
   options: [
-    { ...archetype('warrior'), id: 'warrior', label: 'Warrior', baseWeight: 18, rarity: 'common', statBonus: { might: 2, vitality: 1 }, epithet: { text: 'the Warrior', priority: 16 }, color: '#9a4a3a', icon: 'Sword' },
-    { ...archetype('rogue'), id: 'rogue', label: 'Rogue', baseWeight: 15, rarity: 'common', statBonus: { agility: 2, intellect: 1 }, epithet: { text: 'the Rogue', priority: 16 }, color: '#4a4a5e', icon: 'VenetianMask' },
-    { ...archetype('ranger'), id: 'ranger', label: 'Ranger', baseWeight: 13, rarity: 'common', statBonus: { agility: 1, vitality: 1, intellect: 1 }, epithet: { text: 'the Ranger', priority: 16 }, color: '#3f7a4a', icon: 'Target' },
-    { ...archetype('mage'), id: 'mage', label: 'Mage', baseWeight: 10, rarity: 'uncommon', statBonus: { arcana: 2, intellect: 1 }, queueSpins: { arcane_powers: 1 }, epithet: { text: 'the Mage', priority: 18 }, color: '#5a5ad0', icon: 'WandSparkles' },
-    { ...archetype('cleric'), id: 'cleric', label: 'Cleric', baseWeight: 9, rarity: 'uncommon', statBonus: { arcana: 1, vitality: 1, intellect: 1 }, queueSpins: { blessed_powers: 1 }, epithet: { text: 'the Cleric', priority: 18 }, color: '#d9c27a', icon: 'Church' },
-    { ...archetype('paladin'), id: 'paladin', label: 'Paladin', baseWeight: 8, rarity: 'uncommon', statBonus: { might: 1, vitality: 1, arcana: 1 }, epithet: { text: 'the Paladin', priority: 20 }, color: '#c9a24c', icon: 'ShieldCheck' },
-    { ...archetype('barbarian'), id: 'barbarian', label: 'Barbarian', baseWeight: 8, rarity: 'uncommon', statBonus: { might: 3, vitality: 1, intellect: -1 }, epithet: { text: 'the Barbarian', priority: 18 }, color: '#8a2e2e', icon: 'Axe' },
-    { ...archetype('bard'), id: 'bard', label: 'Bard', baseWeight: 7, rarity: 'uncommon', statBonus: { intellect: 1, agility: 1 }, luckDelta: 0.25, epithet: { text: 'the Bard', priority: 16 }, color: '#c0569a', icon: 'Music' },
-    { ...archetype('druid'), id: 'druid', label: 'Druid', baseWeight: 4, rarity: 'rare', statBonus: { arcana: 1, vitality: 1 }, queueSpins: { arcane_powers: 1 }, epithet: { text: 'the Druid', priority: 22 }, color: '#4f8a3a', icon: 'Leaf' },
-    { ...archetype('monk'), id: 'monk', label: 'Monk', baseWeight: 4, rarity: 'rare', statBonus: { agility: 2, vitality: 1 }, epithet: { text: 'the Monk', priority: 22 }, color: '#d98a3a', icon: 'Hand' },
-    { ...archetype('warlock'), id: 'warlock', label: 'Warlock', baseWeight: 3, rarity: 'rare', statBonus: { arcana: 2 }, queueSpins: { corrupted_powers: 1 }, grantTags: ['pact'], epithet: { text: 'the Warlock', priority: 24 }, color: '#5a2a6e', icon: 'Eye' },
-    { ...archetype('artificer'), id: 'artificer', label: 'Artificer', baseWeight: 3, rarity: 'rare', statBonus: { intellect: 2 }, weaponTierDelta: 1, epithet: { text: 'the Artificer', priority: 22 }, color: '#7a8a9a', icon: 'Cog' },
-    { ...archetype('necromancer'), id: 'necromancer', label: 'Necromancer', baseWeight: 1.5, rarity: 'epic', statBonus: { arcana: 2, intellect: 1 }, queueSpins: { corrupted_powers: 1 }, epithet: { text: 'the Necromancer', priority: 30 }, color: '#2f5a4a', icon: 'Skull' },
+    { id: 'dormant', label: 'Dormant', description: 'It sleeps. Its power trickles through: half strength, no say.', baseWeight: 26, rarity: 'common', honeLastTrait: { factor: 0.5, rank: 'Dormant' }, nextStepId: 'fate', color: '#4a4a52', icon: 'Bed' },
+    { id: 'whispering', label: 'Whispering', description: 'It talks at night. They listen, mostly.', baseWeight: 26, rarity: 'common', honeLastTrait: { factor: 1, rank: 'Whispering' }, nextStepId: 'fate', color: '#5a6a7a', icon: 'Wind' },
+    { id: 'bonded', label: 'Bonded', description: 'Two minds, one body, an understanding.', baseWeight: 20, rarity: 'uncommon', honeLastTrait: { factor: 1.5, rank: 'Bonded' }, nextStepId: 'fate', color: '#4f8a9a', icon: 'Handshake' },
+    { id: 'entwined', label: 'Entwined', description: 'Where they end and it begins is a matter of opinion.', baseWeight: 12, rarity: 'rare', honeLastTrait: { factor: 2.25, rank: 'Entwined' }, statBonus: { intellect: -1 }, nextStepId: 'fate', color: '#5a7ae0', icon: 'Dna' },
+    { id: 'overtaken', label: 'Overtaken', description: 'It drives. They ride along, and watch.', baseWeight: 8, rarity: 'rare', honeLastTrait: { factor: 3.5, rank: 'Overtaken' }, statBonus: { intellect: -2 }, luckDelta: -0.5, grantTags: ['possessed'], nextStepId: 'fate', color: '#6e2a5a', icon: 'EyeOff' },
+    { id: 'consumed', label: 'Consumed', description: 'Very little of them is left, and that little is screaming.', baseWeight: 4, rarity: 'epic', honeLastTrait: { factor: 5, rank: 'Consumed' }, statBonus: { intellect: -3, vitality: 2 }, grantTags: ['possessed'], epithet: { text: 'the Hollowed', priority: 52 }, nextStepId: 'fate', color: '#2a1a2a', icon: 'Skull' },
+    { id: 'perfect_union', label: 'Perfect Union', description: 'Two souls, one will. It chose them as much as they chose it.', baseWeight: 2, rarity: 'legendary', honeLastTrait: { factor: 4, rank: 'In Perfect Union' }, statBonus: { might: 1, agility: 1, intellect: 1, arcana: 1, vitality: 1 }, epithet: { text: 'the Twin-Souled', priority: 72 }, nextStepId: 'fate', color: '#ffb84d', icon: 'Sparkles' },
   ],
 };
+
+// ─── The Gambler's coin ─────────────────────────────────────────────────────
+
+/** Spun after every gain a Gambler makes. Where it goes next is the stake's (`Character.stake`), not its own. */
+const GAMBLE: WheelStep = {
+  id: GAMBLE_STEP,
+  title: 'Double or Nothing',
+  subtitle: 'Everything that roll gave you, on one coin.',
+  fixed: true,
+  repeats: true,
+  options: [
+    { id: 'double', label: 'Double It', description: 'Every gain doubled. A stat the wheel set is doubled outright.', baseWeight: 49, rarity: 'common', gamble: 'double', fame: 0, nextStepId: null, color: '#c9a24c', icon: 'Coins' },
+    { id: 'lose', label: 'Lose It All', description: 'Every gain gone. A stat the wheel set falls to 1.', baseWeight: 49, rarity: 'common', gamble: 'lose', fame: 0, nextStepId: null, color: '#3a2629', icon: 'HeartCrack' },
+    { id: 'jackpot', label: 'Jackpot', description: 'The coin lands on its edge. Every gain tripled.', baseWeight: 2, rarity: 'epic', gamble: 'triple', fame: 0, nextStepId: null, color: '#ffd76a', icon: 'Gem' },
+  ],
+};
+
+// ─── The Trickster's gambit ─────────────────────────────────────────────────
+
+/** Before every fight. Its options all go on to the fight (`evade: 'fight'`), with their power bent. */
+const TRICKSTER: WheelStep = {
+  id: TRICKSTER_STEP,
+  title: 'The Trickster’s Gambit',
+  subtitle: 'Before facing {foe}, fate shuffles the deck.',
+  fixed: true,
+  repeats: true,
+  options: (
+    [
+      ['as_you_are', 'As You Are', 'No tricks this time. Their own power, nothing more.', 1, 26, 'common', '#6a6a72', 'CircleDot'],
+      ['emboldened', 'Emboldened', 'A grin, a feint, a lucky angle: power ×1.5.', 1.5, 20, 'common', '#7ae0a8', 'Wind'],
+      ['shaken', 'Shaken', 'A bad omen at the worst time: power ×0.75.', 0.75, 16, 'uncommon', '#8a7a6a', 'CloudFog'],
+      ['halved', 'Halved', 'The trick backfires: power ×0.5.', 0.5, 13, 'uncommon', '#5a4a5a', 'ArrowDown'],
+      ['doubled', 'Doubled', 'Two of them, somehow, for one fight: power ×2.', 2, 12, 'rare', '#c0569a', 'Users'],
+      ['quartered', 'Quartered', 'They trick themselves: power ×0.25.', 0.25, 5, 'epic', '#2a1a2a', 'HeartCrack'],
+      ['tripled', 'Tripled', 'The whole battlefield is in on the joke: power ×3.', 3, 5, 'epic', '#9a5ae0', 'Shuffle'],
+      ['tenfold', 'Tenfold', 'Fate itself laughs along: power ×10.', 10, 0.8, 'legendary', '#ffb84d', 'Sparkles'],
+    ] as const
+  ).map(([id, label, description, boost, weight, rarity, color, icon]): WheelOption => ({
+    id,
+    label,
+    description,
+    baseWeight: weight,
+    rarity,
+    fightBoost: boost,
+    evade: 'fight',
+    fame: 0,
+    nextStepId: null,
+    color,
+    icon,
+  })),
+};
+
+// ─── Martial training ───────────────────────────────────────────────────────
+
+/** A Martial soul's spell wheels, under their own ids: a season of training instead of a spell. Never Arcana. */
+const MARTIAL: WheelStep = {
+  id: MARTIAL_STEP,
+  title: 'Training, Not Spells',
+  subtitle: 'Magic would have come. Discipline came instead.',
+  repeats: true,
+  options: [
+    { id: 'drill_might', label: 'Strength Drills', description: 'Stones lifted until the stones gave up: Might +2.', baseWeight: 20, rarity: 'common', statModifiers: { might: 2 }, nextStepId: POWERS_ROUTE, color: '#f08a62', icon: 'BicepsFlexed' },
+    { id: 'drill_agility', label: 'Footwork', description: 'A thousand steps, then a thousand more: Agility +2.', baseWeight: 20, rarity: 'common', statModifiers: { agility: 2 }, nextStepId: POWERS_ROUTE, color: '#7ae0a8', icon: 'Footprints' },
+    { id: 'drill_vitality', label: 'Endurance', description: 'Running, cold water, no complaints: Vitality +2.', baseWeight: 20, rarity: 'common', statModifiers: { vitality: 2 }, nextStepId: POWERS_ROUTE, color: '#f5c07a', icon: 'Heart' },
+    { id: 'drill_intellect', label: 'Tactics', description: 'A war table and an old soldier: Intellect +2.', baseWeight: 16, rarity: 'common', statModifiers: { intellect: 2 }, nextStepId: POWERS_ROUTE, color: '#8abaf0', icon: 'Brain' },
+    { id: 'iron_body', label: 'Iron Body', description: 'Hit until nothing hurts: Might +2, Vitality +2.', baseWeight: 6, rarity: 'rare', statModifiers: { might: 2, vitality: 2 }, nextStepId: POWERS_ROUTE, color: '#8a94a4', icon: 'ShieldHalf' },
+    { id: 'everything_at_once', label: 'Everything at Once', description: 'A brutal season that works on all of it: +2 to every stat but Arcana.', baseWeight: 3, rarity: 'epic', statModifiers: { might: 2, agility: 2, intellect: 2, vitality: 2 }, nextStepId: POWERS_ROUTE, color: '#ffd76a', icon: 'Dumbbell' },
+    { id: 'perfect_form', label: 'Perfect Form', description: 'One motion, perfected: Might +4, Agility +4.', baseWeight: 0.8, rarity: 'legendary', statModifiers: { might: 4, agility: 4 }, nextStepId: POWERS_ROUTE, color: '#ffb84d', icon: 'Swords' },
+  ],
+};
+
+export const ARCHETYPE_STEPS: WheelStep[] = [ARCHETYPE, VESSEL, ASSIMILATION, GAMBLE, TRICKSTER, MARTIAL];

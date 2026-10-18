@@ -6,9 +6,10 @@
  * There is no wheel-specific logic here. Which wheel shows, what it contains and
  * what comes next all come from GAME_CONFIG through the engine.
  */
-import { Suspense, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { GameIconsCredit } from './ui/GameIcon';
+import { Suspense, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Crosshair, Volume2, VolumeX } from 'lucide-react';
+import { Crosshair, TriangleAlert, Volume2, VolumeX } from 'lucide-react';
 import { GAME_CONFIG } from './config/gameConfig';
 import { DEV_TOOLS_ENABLED, WheelInspector } from './devtools';
 import { setDevPick, useDevPick } from './ui/devPick';
@@ -18,7 +19,7 @@ import { findCharacter, playerHero } from './engine/world';
 import { useAdventure } from './state/useAdventure';
 import { useCharacterGeneration } from './state/useCharacterGeneration';
 import { useProfileTracker } from './state/useProfileTracker';
-import { useWorld } from './state/useWorld';
+import { useWorld, type SaveStatus } from './state/useWorld';
 import { AdventureTab } from './ui/AdventureTab';
 import { ChronicleTab } from './ui/ChronicleTab';
 import { FeatToasts } from './ui/FeatToasts';
@@ -26,41 +27,58 @@ import { SeedPanel } from './ui/SeedPanel';
 import { CharacterCard } from './ui/CharacterCard';
 import { OddsList } from './ui/OddsList';
 import { sound, useSoundMuted } from './ui/sound';
-import { RollReveal, primaryButton } from './ui/RollReveal';
+import { HeroBar, type CardSubject } from './ui/HeroBar';
+import { RollReveal, primaryButton, secondaryButton } from './ui/RollReveal';
 import { returnToWheel } from './ui/motion';
 import { WorldPanel } from './ui/WorldPanel';
 import { STAT_LABELS, signed } from './ui/format';
 import { isSpecialRarity, rarityOf } from './ui/rarity';
-import { SpinWheel } from './ui/wheel/SpinWheel';
+import { FateWheels } from './ui/wheel/FateWheels';
+import { GearCompare } from './ui/GearCard';
+import { ChoicePanel } from './ui/QuestPanel';
+import { pendingOffer } from './engine/gear';
+import { isGearStep } from './engine/gearStep';
+import { isSideBet, sideBetBackdrop } from './ui/wheel/MiniSpinWheel';
+import { WheelTitle } from './ui/WheelTitle';
 import { withAlpha } from './ui/wheel/color';
 import { glassColor } from './ui/wheel/paintWheel';
+import { SettingsTab } from './ui/SettingsTab';
 
-type Tab = 'create' | 'adventure' | 'chronicle' | 'wheels';
+type Tab = 'create' | 'adventure' | 'chronicle' | 'settings' | 'wheels';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'create', label: 'Create' },
   { id: 'adventure', label: 'Adventures' },
   { id: 'chronicle', label: 'Chronicle' },
+  { id: 'settings', label: 'Settings' },
   // Dev tools: browse and spin any wheel. Switched off in src/devtools/index.ts.
   ...(DEV_TOOLS_ENABLED ? [{ id: 'wheels' as const, label: 'Wheels' }] : []),
 ];
 
 export default function App() {
-  const report = useMemo(() => validateGameConfig(GAME_CONFIG), []);
-  if (report.errors.length > 0) return <ConfigErrors errors={report.errors} />;
+  // The config is static and the test suite validates it, so only a dev build (someone editing
+  // the wheels) pays for checking it again at startup: a third of the work before the first wheel.
+  const errors = useMemo(() => (import.meta.env.DEV ? validateGameConfig(GAME_CONFIG).errors : []), []);
+  if (errors.length > 0) return <ConfigErrors errors={errors} />;
   return <Game config={GAME_CONFIG} />;
 }
 
 function Game({ config }: { config: GameConfig }) {
-  const { world, commit, finishAdventure, setThreatLevel, resetWorld } = useWorld(config);
+  const { world, commit, finishAdventure, setThreatLevel, resetWorld, saveStatus, retrySave } = useWorld(config);
   const generation = useCharacterGeneration(config, world);
   const adventure = useAdventure(config, world, finishAdventure);
   const tracker = useProfileTracker(world, config);
   // A living hero's place is on the road: open there, even after a reload.
   const [tab, setTab] = useState<Tab>(() => (playerHero(world) ? 'adventure' : 'create'));
+  // The panel only fades in when the player moves between banners, not on the first load.
+  const firstTab = useRef(tab);
+  const tabChanged = useRef(false);
+  if (tab !== firstTab.current) tabChanged.current = true;
   const [inspectedId, setInspectedId] = useState<string | null>(null);
   const [commitError, setCommitError] = useState<string | null>(null);
 
   const [notice, setNotice] = useState<string | null>(null);
+  /** The right-hand column's place for the adventure's panels (ui/AdventureTab.tsx). */
+  const [sideSlot, setSideSlot] = useState<HTMLDivElement | null>(null);
 
   const inspected = inspectedId ? (findCharacter(world, inspectedId) ?? null) : null;
   const hero = playerHero(world);
@@ -149,7 +167,7 @@ function Game({ config }: { config: GameConfig }) {
         </AnimatePresence>
       </div>
 
-      <header className="relative mx-auto max-w-7xl px-4 sm:px-8">
+      <header className="relative mx-auto max-w-7xl pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:pl-[max(2rem,env(safe-area-inset-left))] sm:pr-[max(2rem,env(safe-area-inset-right))]">
         <GiltRod />
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
           <div className="flex items-center gap-3 pt-4">
@@ -169,6 +187,7 @@ function Game({ config }: { config: GameConfig }) {
                 create: null,
                 adventure: adventure.session && adventure.session.phase !== 'complete' ? 'under way' : null,
                 chronicle: null,
+                settings: null,
                 wheels: 'dev',
               }}
             />
@@ -180,7 +199,9 @@ function Game({ config }: { config: GameConfig }) {
         </div>
       </header>
 
-      <main className="relative mx-auto grid max-w-7xl gap-8 px-4 pb-20 pt-8 sm:px-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:gap-12">
+      {saveStatus !== 'saved' && <SaveWarning status={saveStatus} onRetry={retrySave} />}
+
+      <main className="relative mx-auto grid max-w-7xl gap-8 pb-40 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-8 sm:pl-[max(2rem,env(safe-area-inset-left))] sm:pr-[max(2rem,env(safe-area-inset-right))] lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:gap-12 lg:pb-20">
         {tab === 'wheels' && WheelInspector ? (
           <section id="panel-wheels" role="tabpanel" aria-labelledby="tab-wheels" className="min-w-0 lg:col-span-2">
             <Suspense fallback={<p className="text-ash">Loading the dev tools…</p>}>
@@ -190,10 +211,11 @@ function Game({ config }: { config: GameConfig }) {
         ) : (
           <>
             <section
+              key={tab}
               id={`panel-${tab}`}
               role="tabpanel"
               aria-labelledby={`tab-${tab}`}
-              className="min-w-0"
+              className={`min-w-0 ${tabChanged.current ? 'panel-enter' : ''}`}
             >
               {tab === 'create' ? (
                 hero ? (
@@ -209,6 +231,8 @@ function Game({ config }: { config: GameConfig }) {
                     onDiscard={handleDiscard}
                   />
                 )
+              ) : tab === 'settings' ? (
+                <SettingsTab />
               ) : tab === 'chronicle' ? (
                 <ChronicleTab
                   world={world}
@@ -226,11 +250,16 @@ function Game({ config }: { config: GameConfig }) {
                   adventure={adventure}
                   onCreateHero={() => setTab('create')}
                   onNextSoul={handleNextSoul}
+                  sideSlot={sideSlot}
                 />
               )}
             </section>
 
             <aside className="flex min-w-0 flex-col gap-6" aria-label="Character and world">
+              {/* On the road, what the wheel is about (odds, a battle, a quest) sits here, beside the wheel. */}
+              {tab === 'adventure' && <div ref={setSideSlot} className="hidden lg:block lg:empty:hidden" />}
+              {/* On a phone the card would sit far below the wheel: the hero bar and its sheet carry it instead. */}
+              <div className="hidden lg:contents">
               <SideCard
                 tab={tab}
                 config={config}
@@ -241,6 +270,7 @@ function Game({ config }: { config: GameConfig }) {
                 hero={hero ?? null}
                 world={world}
               />
+              </div>
               <WorldPanel
                 world={world}
                 config={config}
@@ -252,7 +282,19 @@ function Game({ config }: { config: GameConfig }) {
             </aside>
           </>
         )}
+        <footer className="lg:col-span-2">
+          <GameIconsCredit className="text-center" />
+        </footer>
       </main>
+
+      {tab !== 'wheels' && (
+        <HeroBar
+          own={ownCard({ tab, generation, adventure, hero: hero ?? null, world })}
+          inspected={inspected ? inspectedCard(inspected) : null}
+          config={config}
+          onCloseInspect={() => setInspectedId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -269,7 +311,7 @@ function DevPickToggle() {
       aria-pressed={on}
       aria-label={on ? 'Dev pick on: click a slice to land on it. Turn it off' : 'Dev pick off. Turn it on'}
       title={on ? 'Dev pick ON: click a slice to land on it' : 'Dev pick: click a slice to land on it'}
-      className="btn-plaque p-2"
+      className="btn-plaque p-2 pointer-coarse:p-3"
     >
       <Crosshair aria-hidden="true" size={18} className={on ? 'text-candle' : 'text-ash'} />
     </button>
@@ -286,7 +328,7 @@ function SoundToggle() {
       aria-pressed={!muted}
       aria-label={muted ? 'Sound off. Turn it on' : 'Sound on. Turn it off'}
       title={muted ? 'Sound off' : 'Sound on'}
-      className="btn-plaque p-2"
+      className="btn-plaque p-2 pointer-coarse:p-3"
     >
       <Icon aria-hidden="true" size={18} className={muted ? 'text-ash' : 'text-candle'} />
     </button>
@@ -295,6 +337,13 @@ function SoundToggle() {
 
 function TabBar({ tab, onChange, badges }: { tab: Tab; onChange: (tab: Tab) => void; badges: Record<Tab, string | null> }) {
   const refs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+  // A banner newly stood under swings in from the side the player came from, then settles.
+  const last = useRef(tab);
+  const swing = useRef(1);
+  if (tab !== last.current) {
+    swing.current = TABS.findIndex((t) => t.id === tab) > TABS.findIndex((t) => t.id === last.current) ? 1 : -1;
+    last.current = tab;
+  }
 
   // Arrow keys move between tabs, as the ARIA tabs pattern expects.
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -324,6 +373,7 @@ function TabBar({ tab, onChange, badges }: { tab: Tab; onChange: (tab: Tab) => v
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(id)}
             className={`banner min-w-0 flex-auto sm:flex-none ${selected ? 'banner-active banner-sway' : ''}`}
+            style={selected ? ({ '--swing': swing.current } as CSSProperties) : undefined}
           >
             <span className="banner-cloth">
               <span className="font-caps text-[0.8rem] font-bold leading-tight sm:text-lg sm:tracking-wide">{label}</span>
@@ -394,35 +444,63 @@ interface CreateTabProps {
 function CreateTab({ config, generation, parent, notice, commitError, onCommit, onDiscard }: CreateTabProps) {
   const { session, view } = generation;
   const landed = session.phase === 'upgrading' || session.phase === 'revealing' || session.phase === 'complete';
+  // Keep or Take: what they carry beside what they found, as on the road.
+  const offer = view.step && isGearStep(view.step.id) ? pendingOffer(session.state.character) : undefined;
+  // A Gambler's coin plays over the wheel just rolled: the hall keeps showing that one.
+  const backdrop = sideBetBackdrop(session, view.step, session.state.character.rules);
+  const hallStep = backdrop?.step ?? view.step;
   return (
-    <>
+    <div className="flex flex-col">
       {notice && <p className="court-panel mb-4 px-4 py-2 text-gilt-bright">{notice}</p>}
-      <SeedPanel
-        character={session.state.character}
-        fresh={session.phase === 'ready' && session.state.stepsTaken === 0}
-        parent={parent}
-        onRoll={generation.restart}
-      />
-      <h1 id="wheel-title" className="court-title text-4xl leading-none sm:text-5xl">
-        {view.step?.title ?? 'No wheel'}
-      </h1>
-      {view.step?.subtitle && <p className="mt-2 text-lg text-ash">{view.step.subtitle}</p>}
-      {view.step && <StatRollNote step={view.step} character={session.state.character} />}
-
-      <div className="mt-8">
-        <SpinWheel
-          slices={view.slices}
-          spin={generation.spinRequest}
-          highlightIndex={landed ? view.winnerIndex : null}
-          canSpin={view.canSpin}
-          onSpinRequest={generation.spin}
-          onSettled={generation.settle}
-          upgrade={generation.upgradeRequest}
-          onUpgraded={generation.upgraded}
-          label={view.step?.title ?? 'Wheel'}
-          golden={view.step?.golden}
+      {/* A header of fixed height, and nothing that comes and goes above the wheel: it holds still. */}
+      <div className="min-h-[7.25rem] sm:min-h-[10rem]">
+        <WheelTitle
+          title={hallStep?.title ?? 'No wheel'}
+          subtitle={hallStep?.subtitle}
+          className="court-title line-clamp-2 text-3xl leading-none sm:text-5xl"
         />
       </div>
+
+      <div className="mt-4">
+        {view.step?.choice ? (
+          <>
+            {offer && (
+              <div className="mb-4">
+                <GearCompare offer={offer} character={session.state.character} config={config} />
+              </div>
+            )}
+            <ChoicePanel
+              slices={view.slices}
+              config={config}
+              chosenIndex={landed ? view.winnerIndex : null}
+              disabled={session.phase !== 'ready'}
+              onChoose={generation.choose}
+              {...(offer && { thenLabel: 'Then: creation goes on' })}
+            />
+          </>
+        ) : (
+        <FateWheels
+          view={view}
+          phase={session.phase}
+          character={session.state.character}
+          step={view.step}
+          spinRequest={generation.spinRequest}
+          altSpinRequest={generation.altSpinRequest}
+          upgradeRequest={generation.upgradeRequest}
+          onSpin={generation.spin}
+          onSettled={generation.settle}
+          onSettledAlt={generation.settleAlt}
+          onUpgraded={generation.upgraded}
+          onPick={generation.pick}
+          onSmash={generation.smash}
+          onDecree={generation.decree}
+          onAdvance={generation.next}
+          backdrop={backdrop}
+          label={view.step?.title ?? 'Wheel'}
+        />
+        )}
+      </div>
+      {view.step && <StatRollNote step={view.step} character={session.state.character} />}
 
       {generation.error && (
         <p role="alert" className="mt-4 text-ember">
@@ -435,7 +513,8 @@ function CreateTab({ config, generation, parent, notice, commitError, onCommit, 
 
       <div className="mt-8">
         <RollReveal
-          phase={session.phase}
+          // A side bet shows its own result, over the wheel, and moves on by itself.
+          phase={session.phase === 'revealing' && isSideBet(session.pending?.step ?? session.last?.step, session.state.character.rules) ? 'spinning' : session.phase}
           outcome={session.pending ?? session.last}
           character={view.character}
           config={config}
@@ -449,22 +528,38 @@ function CreateTab({ config, generation, parent, notice, commitError, onCommit, 
         />
       </div>
 
+      {/* The soul's own panel (a seed, the Daily Soul, an heir; scrap and start over) waits below the wheel. */}
+      <div className="mt-8">
+      <SeedPanel
+        character={session.state.character}
+        fresh={session.phase === 'ready' && session.state.stepsTaken === 0}
+        parent={parent}
+        onRoll={generation.restart}
+        // Scrapped mid-roll: a fresh soul (still the heir, if this one was), never mid-spin.
+        onScrap={
+          session.phase === 'ready' || session.phase === 'revealing'
+            ? () => generation.restart(parent ? { heirOf: parent } : null)
+            : undefined
+        }
+      />
+      </div>
+
       {view.step && (
         <div className="mt-8">
           <h2 className="gilt-rule font-caps text-base tracking-wider text-ash">Odds on this wheel</h2>
           <div className="mt-3">
             <OddsList
-              slices={view.slices}
-              winnerIndex={landed ? view.winnerIndex : null}
-              title={view.step.title}
-              stepId={view.step.id}
+              slices={backdrop?.slices ?? view.slices}
+              winnerIndex={backdrop ? backdrop.winnerIndex : landed ? view.winnerIndex : null}
+              title={backdrop?.step.title ?? view.step.title}
+              stepId={backdrop?.step.id ?? view.step.id}
               config={config}
               character={session.state.character}
             />
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -519,37 +614,33 @@ interface SideCardProps {
 
 /** Whoever the player is looking at: an inspected soul, the one being rolled, or the player's hero. */
 function SideCard({ tab, config, inspected, onCloseInspect, generation, adventure, hero, world }: SideCardProps) {
-  if (inspected) {
-    return (
-      <CharacterCard
-        character={inspected}
-        previous={null}
-        config={config}
-        status={statusLine(inspected)}
-        onClose={onCloseInspect}
-      />
-    );
-  }
+  const subject = inspected ? inspectedCard(inspected) : ownCard({ tab, generation, adventure, hero, world });
+  if (!subject) return null;
+  return <CharacterCard {...subject} config={config} {...(inspected && { onClose: onCloseInspect })} />;
+}
+
+/** Someone picked in the world, as their card shows them. */
+function inspectedCard(inspected: Character): CardSubject {
+  return { character: inspected, previous: null, status: statusLine(inspected) };
+}
+
+/**
+ * The player's own soul or hero, as the card (and on a phone, the hero bar) shows them: the soul
+ * being rolled, the hero on the road, or the hero between adventures. Null when there is none.
+ */
+function ownCard({ tab, generation, adventure, hero, world }: Pick<SideCardProps, 'tab' | 'generation' | 'adventure' | 'hero' | 'world'>): CardSubject | null {
   if (tab === 'create' && !hero) {
     const { session, view } = generation;
-    return (
-      <CharacterCard
-        character={view.character}
-        previous={view.previous}
-        config={config}
-        status={session.phase === 'complete' ? 'ready to enter the world' : 'being rolled'}
-      />
-    );
+    return { character: view.character, previous: view.previous, status: session.phase === 'complete' ? 'ready to enter the world' : 'being rolled' };
   }
   if (adventure.session && adventure.view) {
     const { previous } = adventure.view;
     const over = adventure.session.phase === 'complete';
     // Once the road ends, the world holds the hero with this adventure written into their record.
     const character = (over && findCharacter(world, adventure.view.character.id)) || adventure.view.character;
-    const status = over ? statusLine(character, 'home again') : 'on an adventure';
-    return <CharacterCard character={character} previous={previous} config={config} status={status} />;
+    return { character, previous, status: over ? statusLine(character, 'home again') : 'on an adventure' };
   }
-  if (hero) return <CharacterCard character={hero} previous={null} config={config} status="between adventures" />;
+  if (hero) return { character: hero, previous: null, status: 'between adventures' };
   return null;
 }
 
@@ -577,5 +668,34 @@ function ConfigErrors({ errors }: { errors: string[] }) {
         ))}
       </ul>
     </main>
+  );
+}
+
+/**
+ * The world isn't reaching the browser's storage: say so, plainly, before the player loses a
+ * life's work to a closed tab. A refused save can be tried again (after freeing space).
+ */
+function SaveWarning({ status, onRetry }: { status: Exclude<SaveStatus, 'saved'>; onRetry: () => void }) {
+  return (
+    <div className="relative mx-auto max-w-7xl px-4 pt-6 sm:px-8">
+      <div role="alert" className="court-panel flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
+        <TriangleAlert aria-hidden="true" className="size-6 shrink-0 text-ember" strokeWidth={2.25} />
+        <div className="min-w-0 flex-1 basis-64">
+          <p className="font-caps text-base tracking-wide text-candle">
+            {status === 'unavailable' ? 'This world is not being saved' : 'The world could not be saved'}
+          </p>
+          <p className="mt-1 max-w-[70ch] text-sm text-vellum">
+            {status === 'unavailable'
+              ? 'This browser is not letting Soulwheel keep anything (a private window, or blocked site data). Play on, but closing or reloading this tab ends the world and everyone in it.'
+              : 'The browser refused the last save, most likely because its storage for this site is full. Everything since the last good save lives only in this tab. Free some site data, then try again.'}
+          </p>
+        </div>
+        {status === 'failed' && (
+          <button type="button" className={`${secondaryButton} min-h-11`} onClick={onRetry}>
+            Try saving again
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

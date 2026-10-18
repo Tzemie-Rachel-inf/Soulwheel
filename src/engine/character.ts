@@ -1,10 +1,12 @@
 import { EngineError } from './errors';
+import { equip, mintGear, offerGear, temper } from './gear';
 import { createId, defaultRng, type Rng } from './rng';
 import {
   STAT_KEYS,
   type CastSpoils,
   type Character,
   type GameConfig,
+  type GearGrant,
   type ResolvedSlice,
   type RollRecord,
   type StatBlock,
@@ -20,9 +22,9 @@ export function racesOf(char: Pick<Character, 'race' | 'tags'>): string[] {
   return char.race === null ? blood : [char.race, ...blood.filter((r) => r !== char.race)];
 }
 
-/** Upper bound for `Character.weaponTier`. Tier 10 is worth 250 CP. */
+/** The most power a weapon can have. Power 10 is worth 250 CP. */
 export const MAX_WEAPON_TIER = 10;
-/** Upper bound for `Character.armorTier`. Tier 10 is worth 200 CP. */
+/** The most power armour can have. Power 10 is worth 200 CP. */
 export const MAX_ARMOR_TIER = 10;
 
 export interface CreateCharacterOptions {
@@ -54,8 +56,8 @@ export function createCharacter(
     stats: { ...config.baseStats },
     statBonus: { might: 0, agility: 0, intellect: 0, arcana: 0, vitality: 0 },
     luck: 0,
-    weaponTier: 0,
-    armorTier: 0,
+    weapon: null,
+    armor: null,
     fame: 0,
     traits: [],
     tags: [],
@@ -95,14 +97,17 @@ export function applyOption(
  * - `statBonus` is banked for the stat wheels; `setStats` sets a stat to its rolled value
  *   and spends that stat's bank (the bank has already moved the roll: see ladder.ts).
  * - Luck changes by `luckDelta`.
- * - Weapon tier changes by `weaponTierDelta`, clamped to [0, MAX_WEAPON_TIER]; armour likewise.
- *   `gear` is a whole item: it replaces theirs only if it is a higher tier.
+ * - A `weaponTierDelta` gain finds a better weapon, offered like `gear`; an `upgrade` or a loss
+ *   tempers the one in hand (engine/gear.ts `temper`). Armour likewise.
+ *   `gear` is a whole item: an empty slot takes it, a filled one has it offered (`gearOffers`).
  * - Traits are copied from config (snapshots); a trait already owned is skipped.
  * - `honeLastTrait` then multiplies the newest trait's power and gives it a rank;
  *   `honeTrait` sets a named trait's rank, its power measured from its base in config.
  * - Tags and singleton claims are set-unions; `removeTags` then takes tags away.
  * - Meters move by `meters`, within 0 and each meter's max.
- * - `setRole`, `setRace`, `setPersonality`, `setArchetype` and `setStatus` overwrite.
+ * - `setRole`, `setRace`, `setPersonality`, `setArchetype` and `setStatus` overwrite. A new archetype
+ *   brings a frozen copy of its rules (`Character.rules`); stats they hold fixed stay fixed, and a
+ *   soul whose rules forbid a weapon holds none.
  * - Spinning a wheel that is in the spin queue uses up one of its spins; `queueSpins` adds more.
  *
  * @throws EngineError('UNKNOWN_TRAIT' | 'UNKNOWN_RACE' | 'UNKNOWN_PERSONALITY') if the option
@@ -150,9 +155,6 @@ export function applyEffects(
     statBonus[key] += option.statBonus?.[key] ?? 0;
   }
 
-  const weaponTier = clamp(Math.max(char.weaponTier + (option.weaponTierDelta ?? 0), option.gear?.weapon ?? 0), 0, MAX_WEAPON_TIER);
-  const armorTier = clamp(Math.max(char.armorTier + (option.armorTierDelta ?? 0), option.gear?.armor ?? 0), 0, MAX_ARMOR_TIER);
-
   const traits = [...char.traits];
   for (const traitId of option.grantTraits ?? []) {
     if (traits.some((t) => t.id === traitId)) continue;
@@ -185,8 +187,20 @@ export function applyEffects(
     if (at >= 0) traits[at] = { ...traits[at]!, power: Math.round(def.power * master.factor), rank: master.rank };
   }
 
-  return {
-    ...char,
+  // A new archetype brings its rules, frozen like a trait; whatever they hold fixed stays fixed.
+  const archetype = option.setArchetype === undefined ? undefined : config.archetypes[option.setArchetype];
+  const rules = archetype ? (archetype.rules && structuredClone(archetype.rules)) : char.rules;
+  for (const [key, value] of Object.entries(rules?.fixedStats ?? {}) as [keyof StatBlock, number][]) {
+    stats[key] = value;
+    statBonus[key] = 0;
+  }
+
+  const { rules: _oldRules, decrees: _oldDecrees, ...kept } = char;
+  const applied: Character = {
+    ...(archetype ? kept : char),
+    ...(rules && { rules }),
+    ...(archetype?.rules?.decrees && { decrees: archetype.rules.decrees }),
+    ...(option.fightBoost !== undefined && { fightBoost: option.fightBoost }),
     role: option.setRole ?? char.role,
     race: option.setRace ?? char.race,
     personality: option.setPersonality ?? char.personality,
@@ -195,36 +209,55 @@ export function applyEffects(
     stats,
     statBonus,
     luck: char.luck + (option.luckDelta ?? 0),
-    weaponTier,
-    armorTier,
     traits,
     tags: union(char.tags, option.grantTags).filter((tag) => !option.removeTags?.includes(tag)),
     ...(option.meters && { meters: addMeters(char.meters, option.meters, config) }),
     singletonClaims: union(char.singletonClaims, option.claimSingleton ? [option.claimSingleton] : []),
     spinQueue: [...withoutFirst(char.spinQueue, stepId), ...queued(option.queueSpins)],
   };
+  return applyGear(applied, option, config);
 }
 
 /**
- * What a hero takes from a cast character (see `WheelOption.spoils`): their gear, where it is
- * better than the hero's own, what they trained into them, and every trait handed over that the
- * hero doesn't already own.
+ * An option's gear: tempering first (`weaponTierDelta`), then the items it hands over, each
+ * taken at once into an empty slot or offered for a filled one. A soul whose rules forbid a
+ * weapon puts theirs down. Abilities are kept in step with what is equipped.
+ */
+function applyGear(char: Character, option: WheelOption, config: GameConfig): Character {
+  let next = char;
+  // A loss wears down what they carry, and so does a smith's work; any other gain is something new, found.
+  const found: { weapon?: GearGrant; armor?: GearGrant } = {};
+  for (const [kind, delta] of [['weapon', option.weaponTierDelta], ['armor', option.armorTierDelta]] as const) {
+    if (!delta) continue;
+    if (delta < 0 || option.upgrade) next = temper(next, kind, delta, config);
+    else found[kind] = { better: delta };
+  }
+  for (const kind of ['weapon', 'armor'] as const) {
+    const grant = option.gear?.[kind] ?? found[kind];
+    if (grant === undefined) continue;
+    const minted = mintGear(config, next, kind, grant);
+    next = offerGear(minted.char, minted.item, config);
+  }
+  return equip(next, 'weapon', next.rules?.noWeapon ? null : next.weapon, config);
+}
+
+/**
+ * What a hero takes from a cast character (see `WheelOption.spoils`): their gear, offered (an
+ * empty slot takes it at once), what they trained into them, and every trait handed over that
+ * the hero doesn't already own.
  * Pure: returns a new Character.
  */
-export function applySpoils(char: Character, spoils: CastSpoils): Character {
+export function applySpoils(char: Character, spoils: CastSpoils, config: GameConfig): Character {
   const traits = [...char.traits];
   for (const trait of spoils.traits ?? []) {
     if (!traits.some((t) => t.id === trait.id)) traits.push({ ...trait });
   }
   const stats = { ...char.stats };
   for (const key of STAT_KEYS) stats[key] = Math.max(0, stats[key] + (spoils.stats?.[key] ?? 0));
-  return {
-    ...char,
-    stats,
-    weaponTier: clamp(Math.max(char.weaponTier, spoils.weaponTier ?? 0), 0, MAX_WEAPON_TIER),
-    armorTier: clamp(Math.max(char.armorTier, spoils.armorTier ?? 0), 0, MAX_ARMOR_TIER),
-    traits,
-  };
+  let next: Character = { ...char, stats, traits };
+  if (spoils.weapon) next = offerGear(next, spoils.weapon, config);
+  if (spoils.armor) next = offerGear(next, spoils.armor, config);
+  return next;
 }
 
 /** Meters after a change, each kept within 0 and its max (meters the config doesn't know are left out). */

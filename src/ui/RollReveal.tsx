@@ -2,12 +2,12 @@
  * What just happened on the wheel, and what to do next.
  * Effects and the next wheel's name are read from config, never hard-coded.
  */
-import { useId, useState, type CSSProperties } from 'react';
+import { useId, useState, type CSSProperties, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { findStep } from '../engine/adventure';
 import { calculatePowerRating } from '../engine/power';
 import type { LadderBump } from '../engine/ladder';
-import type { Character, GameConfig, ResolvedSlice } from '../engine/types';
+import { RARITIES, type Character, type GameConfig, type ResolvedSlice } from '../engine/types';
 import type { GenerationPhase } from '../state/generationSession';
 import { ROLE_LABELS, describeEffects, formatOdds, fullName, humanizeKey, optionLabel, heroRace, signed, unlockedBy } from './format';
 import { getOptionIcon } from './icons';
@@ -48,9 +48,9 @@ export function RollReveal(props: RollRevealProps) {
       </p>
       <AnimatePresence mode="wait" initial={false}>
         {phase === 'revealing' && outcome && (
-          <motion.div key={`reveal-${outcome.step.id}-${outcome.state.stepsTaken}`} {...enter}>
+          <RevealPopup key={`reveal-${outcome.step.id}-${outcome.state.stepsTaken}`} jackpot={jackpotColor(outcome)}>
             <OutcomeCard outcome={outcome} config={config} onContinue={onContinue} finishLabel="Finish character" />
-          </motion.div>
+          </RevealPopup>
         )}
         {phase === 'complete' && (
           <motion.div key="complete" {...enter}>
@@ -59,6 +59,54 @@ export function RollReveal(props: RollRevealProps) {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/** A rare-or-better result's rarity colour: it lands as a jackpot. Null for anything less. */
+export function jackpotColor(outcome: RevealedOutcome): string | null {
+  const rarity = rarityOf(resultOf(outcome).option);
+  return isSpecialRarity(rarity) ? RARITY_STYLES[rarity].color : null;
+}
+
+/**
+ * A spin's result, as a popup in the middle of the screen: it bursts out of the wheel's hub the
+ * moment the wheel lands, so the page never scrolls to find it. Continue closes it. A jackpot
+ * (a rare-or-better result, `jackpot` its colour) throws gilt coins and stars out from behind it.
+ */
+export function RevealPopup({ children, jackpot = null }: { children: ReactNode; jackpot?: string | null }) {
+  const reduce = useReducedMotion();
+  // Where the Spin button (the wheel's hub) sits, relative to the middle of the screen: the popup
+  // grows out of it and settles centred on its x, as far as the screen's edges allow.
+  const [{ from, toX }] = useState(() => {
+    const hub = (document.querySelector('[data-spin-button]') ?? document.querySelector('canvas'))?.getBoundingClientRect();
+    if (!hub || hub.width === 0) return { from: { x: 0, y: 0 }, toX: 0 };
+    const x = hub.left + hub.width / 2 - window.innerWidth / 2;
+    const y = hub.top + hub.height / 2 - window.innerHeight / 2;
+    const slack = Math.max(0, (window.innerWidth - 32 - Math.min(576, window.innerWidth - 32)) / 2); // p-4, max-w-xl
+    return { from: { x, y }, toX: Math.max(-slack, Math.min(slack, x)) };
+  });
+  return (
+    <motion.div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/55 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      {jackpot && !reduce && <CoinBurst color={jackpot} x={toX} />}
+      <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Result"
+        className="no-scrollbar max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto overflow-x-hidden"
+        initial={reduce ? { opacity: 0, x: toX } : { opacity: 0, scale: 0.15, x: from.x, y: from.y }}
+        animate={reduce ? { opacity: 1, x: toX } : { opacity: 1, scale: 1, x: toX, y: 0 }}
+        exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.92 }}
+        transition={reduce ? { duration: 0.15 } : { type: 'spring', stiffness: 260, damping: 22 }}
+      >
+        {children}
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -98,17 +146,25 @@ export function OutcomeCard({ outcome, config, onContinue, finishLabel, castName
   const effects = describeEffects(option, config, outcome.step.options.find((o) => o.id === option.id), castName, outcome.state.character);
   const nextStep = outcome.state.currentStepId ? findStep(config, outcome.state.currentStepId) : undefined;
   const thanksTo = unlockedBy(option, config, outcome.state.character);
+  // A real spin pays out its odds like a prize wheel; a smash, a decree or a choice had none.
+  const spun = outcome.roll.draw >= 0;
 
   return (
     <div
-      className="court-panel p-5"
-      style={special ? ({ '--panel-glow': `0 0 30px -4px ${style.color}` } as CSSProperties) : undefined}
+      className={`court-panel p-5 ${special ? 'pt-11' : ''}`}
+      style={special ? ({ '--panel-glow': `0 0 34px -2px ${style.color}` } as CSSProperties) : undefined}
     >
       {/* A pennon in the winning slice's colour, hung from the board's top edge. */}
       <span aria-hidden="true" className="pennon" style={{ '--tincture': glass } as CSSProperties} />
-      <div className="flex items-start gap-4">
+      {/* A jackpot hangs its banner from the middle of the board, like the tabs from their rod. */}
+      {special && (
+        <span aria-hidden="true" className="jackpot-banner absolute left-1/2 top-0 z-[2] -translate-x-1/2 font-caps text-sm font-bold tracking-[0.18em] text-candle">
+          {style.label}!
+        </span>
+      )}
+      <div className="flex flex-wrap items-start gap-4 sm:flex-nowrap">
         <RolledIcon slice={winner} glass={glass} burstColor={special ? style.color : null} />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h3
             className={`font-display text-3xl leading-tight text-candle ${shimmer ? 'rarity-shimmer' : ''}`}
             style={shimmer ? ({ '--shine': style.color } as CSSProperties) : undefined}
@@ -116,7 +172,13 @@ export function OutcomeCard({ outcome, config, onContinue, finishLabel, castName
             {optionLabel(option)}
           </h3>
           <p className="text-sm text-ash">
-            {outcome.roll.draw < 0 ? `${outcome.step.title}: your choice` : `${outcome.step.title}, a ${formatOdds(probability)} chance`}
+            {outcome.roll.draw === -2
+              ? `${outcome.step.title}: smashed to a stop`
+              : outcome.roll.draw === -3
+                ? `${outcome.step.title}: decreed`
+                : outcome.roll.draw < 0
+                  ? `${outcome.step.title}: your choice`
+                  : outcome.step.title}
           </p>
           {event && <p className="text-sm font-semibold text-ember">{event}.</p>}
           {rarity !== 'common' && (
@@ -130,6 +192,20 @@ export function OutcomeCard({ outcome, config, onContinue, finishLabel, castName
           {note && <p className="mt-1 text-sm font-semibold text-gilt-bright">{note}.</p>}
           {callback && <p className="mt-1 text-sm font-semibold text-moss">From their past: {callback}.</p>}
         </div>
+        {spun && (
+          // The payout: the odds of where the wheel landed, set as the plaque's biggest number.
+          // On a phone it drops to its own line under the text, so the name keeps the width.
+          <p className="flex basis-full items-baseline gap-3 border-t border-lead pt-3 sm:mr-9 sm:block sm:shrink-0 sm:basis-auto sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0 sm:text-right">
+            <span className="block font-caps text-xs tracking-widest text-ash">{bump ? 'landed at' : 'odds'}</span>
+            <span
+              className="block whitespace-nowrap font-display text-3xl leading-none sm:text-4xl"
+              style={{ color: special ? style.color : 'var(--color-gilt-bright)', textShadow: special ? `0 0 18px ${style.color}66` : undefined }}
+            >
+              {formatOdds(probability)}
+            </span>
+            <span className="sr-only"> chance</span>
+          </p>
+        )}
       </div>
       {fame !== undefined && fame !== 0 && (
         <p className={`mt-3 text-sm font-semibold ${fame > 0 ? 'text-moss' : 'text-ember'}`}>
@@ -151,7 +227,66 @@ export function OutcomeCard({ outcome, config, onContinue, finishLabel, castName
           {nextStep ? 'Continue' : finishLabel}
         </button>
         {nextStep && <p className="text-sm text-ash">Next: {nextStep.title}</p>}
+        <Coins rarity={rarity} />
       </div>
+    </div>
+  );
+}
+
+/** The payout row: a gilt coin per rarity tier, one for a common roll up to six for a mythical one. */
+function Coins({ rarity }: { rarity: ReturnType<typeof rarityOf> }) {
+  const reduceMotion = useReducedMotion() ?? false;
+  const count = RARITIES.indexOf(rarity) + 1;
+  return (
+    <span aria-hidden="true" className="ml-auto flex gap-1">
+      {Array.from({ length: count }, (_, k) => (
+        <motion.i
+          key={k}
+          className="coin"
+          initial={reduceMotion ? false : { y: -14, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.25 + k * 0.08, type: 'spring', stiffness: 500, damping: 18 }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/** Behind a jackpot's plaque: gilt coins and four-point stars flung outward once, then gone. */
+function CoinBurst({ color, x }: { color: string; x: number }) {
+  const [pieces] = useState(() =>
+    Array.from({ length: 22 }, (_, k) => {
+      const angle = (k / 22) * Math.PI * 2 + Math.random() * 0.3;
+      const reach = 220 + Math.random() * 200;
+      return {
+        coin: k % 3 !== 0,
+        x: Math.cos(angle) * reach * 1.3,
+        y: Math.sin(angle) * reach * 0.8 - 40,
+        spin: (Math.random() - 0.5) * 540,
+        delay: Math.random() * 0.18,
+        size: 0.7 + Math.random() * 0.6,
+      };
+    }),
+  );
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center" style={{ transform: `translateX(${x}px)` }}>
+      {pieces.map((p, k) => (
+        <motion.span
+          key={k}
+          className="absolute"
+          initial={{ x: 0, y: 0, rotate: 0, opacity: 1, scale: 0.4 }}
+          animate={{ x: p.x, y: [0, p.y, p.y + 90], rotate: p.spin, opacity: [1, 1, 0], scale: p.size }}
+          transition={{ duration: 1.5, delay: 0.1 + p.delay, ease: [0.16, 1, 0.3, 1], times: [0, 0.6, 1] }}
+        >
+          {p.coin ? (
+            <i className="coin block" />
+          ) : (
+            <svg viewBox="0 0 20 20" className="block size-5">
+              <path d="M10 0Q10 10 20 10Q10 10 10 20Q10 10 0 10Q10 10 10 0Z" fill={k % 2 ? '#fffaf0' : color} />
+            </svg>
+          )}
+        </motion.span>
+      ))}
     </div>
   );
 }
@@ -176,6 +311,7 @@ function RolledIcon({ slice, glass, burstColor }: { slice: ResolvedSlice; glass:
   const Icon = getOptionIcon(slice.option.icon);
   return (
     <span aria-hidden="true" className="relative flex size-12 shrink-0 items-center justify-center">
+      {burstColor && <span className="jackpot-rays absolute -inset-8 rounded-full" style={{ '--ray': burstColor } as CSSProperties} />}
       {burstColor && !reduceMotion && (
         <span className="pointer-events-none absolute inset-0">
           <motion.span

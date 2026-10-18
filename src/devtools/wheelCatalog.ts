@@ -7,6 +7,7 @@
  *   training    the training ladders (one per race and stat), race by race
  *   unreachable anything neither walk finds
  */
+import { archetypeWheels } from '../engine/archetypes';
 import { STAT_KEYS, type GameConfig, type StatKey, type WheelOption, type WheelStep } from '../engine/types';
 import { statStepId, trainStepId } from '../config/stats';
 import { STAT_LABELS } from '../ui/format';
@@ -75,7 +76,14 @@ export function buildCatalog(config: GameConfig): WheelCatalog {
   }
   // A meter's trigger wheel is reached by the meter filling, not by an option: adventures too.
   // So is the road home, by a short adventure.
-  const roots = [...(config.meters ?? []).map((m) => m.trigger), ...(config.adventure.roadHome ? [config.adventure.roadHome.stepId] : [])];
+  // And the evade wheel, by a fight.
+  const roots = [
+    ...(config.meters ?? []).map((m) => m.trigger),
+    ...(config.adventure.roadHome ? [config.adventure.roadHome.stepId] : []),
+    ...(config.adventure.evade ? [config.adventure.evade.stepId] : []),
+    // And an archetype's own wheels, by its rules.
+    ...archetypeWheels(config),
+  ];
   for (const root of roots) {
     for (const id of walk(config, root)) if (!seen.has(id) && !trainOf.has(id)) add(id, 'adventure', config.steps[id]!);
   }
