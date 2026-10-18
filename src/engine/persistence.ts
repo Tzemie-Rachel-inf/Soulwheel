@@ -1,4 +1,5 @@
-import { STAT_KEYS, type ActiveSingletons, type Character, type ChronicleEntry, type Omen, type Place, type StatBlock, type World } from './types';
+import { upgradeLegacyGear } from './gear';
+import { STAT_KEYS, type ActiveSingletons, type Character, type ChronicleEntry, type GameConfig, type Omen, type Place, type StatBlock, type World } from './types';
 
 export const WORLD_STORAGE_KEY = 'roguelite.world';
 
@@ -15,12 +16,13 @@ export function saveWorld(world: World, storage: StorageLike = localStorage): vo
 
 /**
  * Load the saved world, or `null` if there is none or it can't be trusted
- * (corrupt JSON, wrong shape, a schema version other than 2–9). Never throws.
+ * (corrupt JSON, wrong shape, a schema version other than 2–10). Never throws.
  *
  * Older saves are upgraded in place: characters gain whatever fields they predate
  * (`race: null`, `personality: null`, `archetype: null`, `title: null`, an empty adventure log, no luck, an empty stat bank,
  * no queued spins, no armour, and fame for the adventures already behind them), so a world
- * rolled under an earlier version keeps going.
+ * rolled under an earlier version keeps going. Gear from before items (v9 and older: a weapon
+ * and armour tier, named item traits) becomes items, made from `config`'s gear (plain items without it).
  *
  * Singleton entries whose value isn't a character id are dropped, so a damaged
  * save can never lock a role forever.
@@ -29,7 +31,7 @@ export function saveWorld(world: World, storage: StorageLike = localStorage): vo
  * once. The newest becomes the player's hero; the rest stay in the world as its own heroes,
  * met on the road as rivals.
  */
-export function loadWorld(storage: StorageLike = localStorage): World | null {
+export function loadWorld(storage: StorageLike = localStorage, config?: Pick<GameConfig, 'gear' | 'traits'>): World | null {
   const raw = storage.getItem(WORLD_STORAGE_KEY);
   if (raw === null) return null;
 
@@ -41,16 +43,17 @@ export function loadWorld(storage: StorageLike = localStorage): World | null {
   }
   if (!isWorldShape(parsed)) return null;
 
-  const roster = parsed.roster.map(upgradeCharacter);
+  const upgrade = (c: Character) => upgradeCharacter(c, config ?? { traits: {} });
+  const roster = parsed.roster.map(upgrade);
   return {
     ...parsed,
-    schemaVersion: 9,
+    schemaVersion: 10,
     activeSingletons: sanitizeSingletons(parsed.activeSingletons),
     // A v9 world between lives has no hero, and its other living heroes are the world's own.
     heroId: parsed.schemaVersion >= 9 ? (typeof parsed.heroId === 'string' ? parsed.heroId : null) : newestHero(roster),
     roster,
-    graveyard: parsed.graveyard.map(upgradeCharacter),
-    hallOfFame: parsed.hallOfFame.map(upgradeCharacter),
+    graveyard: parsed.graveyard.map(upgrade),
+    hallOfFame: parsed.hallOfFame.map(upgrade),
     // A world from before the chronicle starts with none; the state layer writes it from history.
     season: finiteOr(parsed.season, 0),
     chronicle: Array.isArray(parsed.chronicle) ? parsed.chronicle.filter(isChronicleEntry) : [],
@@ -81,26 +84,31 @@ export function clearWorld(storage: StorageLike = localStorage): void {
 }
 
 /** Fill in fields added after v2. A no-op for characters that already have them. */
-function upgradeCharacter(raw: Character): Character {
-  // A quest's memory and an expedition live only while an adventure runs; one in a save is stale.
-  const { story: _story, expedition: _expedition, ...char } = raw;
+function upgradeCharacter(raw: Character, config: Pick<GameConfig, 'gear' | 'traits'>): Character {
+  // A quest's memory, an expedition, a Gambler's open bet and a Trickster's boost live only while
+  // a run of spins goes on; one in a save is stale.
+  const { story: _story, expedition: _expedition, stake: _stake, fightBoost: _boost, ...char } = raw;
   const loose = char as Partial<Character>;
-  return {
+  return upgradeLegacyGear({
     ...char,
     race: typeof loose.race === 'string' ? loose.race : null,
     personality: typeof loose.personality === 'string' ? loose.personality : null,
-    archetype: typeof loose.archetype === 'string' ? loose.archetype : null,
+    // The old classes (Warrior, Mage...) are gone: souls rolled with one have no archetype.
+    archetype: typeof loose.archetype === 'string' && !RETIRED_CLASSES.has(loose.archetype) ? loose.archetype : null,
     title: typeof loose.title === 'string' ? loose.title : null,
     adventures: Array.isArray(loose.adventures) ? loose.adventures : [],
     luck: typeof loose.luck === 'number' && Number.isFinite(loose.luck) ? loose.luck : 0,
     statBonus: upgradeStatBlock(loose.statBonus),
     spinQueue: Array.isArray(loose.spinQueue) ? loose.spinQueue.filter((id) => typeof id === 'string') : [],
-    armorTier: finiteOr(loose.armorTier, 0),
     // Before fame, heroes still had a reputation: call it a few points per adventure survived.
     fame: finiteOr(loose.fame, (Array.isArray(loose.adventures) ? loose.adventures.length : 0) * LEGACY_FAME_PER_ADVENTURE),
     ...(loose.meters !== undefined && { meters: upgradeMeters(loose.meters) }),
-  };
+    ...(Array.isArray(loose.gearOffers) && { gearOffers: loose.gearOffers }),
+  }, config);
 }
+
+/** The classes that were archetypes before archetypes changed how fate treats a soul. */
+const RETIRED_CLASSES = new Set(['warrior', 'rogue', 'ranger', 'mage', 'cleric', 'paladin', 'barbarian', 'bard', 'druid', 'monk', 'warlock', 'artificer', 'necromancer']);
 
 /** Fame credited to a character from before fame, per adventure behind them. */
 export const LEGACY_FAME_PER_ADVENTURE = 6;
@@ -137,7 +145,7 @@ function sanitizeSingletons(value: unknown): ActiveSingletons {
 function isWorldShape(
   value: unknown,
 ): value is Omit<World, 'schemaVersion' | 'heroId' | 'season' | 'chronicle' | 'omens' | 'places'> & {
-  schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+  schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
   heroId?: unknown;
   season?: unknown;
   chronicle?: unknown;
@@ -147,7 +155,7 @@ function isWorldShape(
   if (typeof value !== 'object' || value === null) return false;
   const w = value as Record<string, unknown>;
   return (
-    typeof w.schemaVersion === 'number' && [2, 3, 4, 5, 6, 7, 8, 9].includes(w.schemaVersion) &&
+    typeof w.schemaVersion === 'number' && [2, 3, 4, 5, 6, 7, 8, 9, 10].includes(w.schemaVersion) &&
     typeof w.id === 'string' &&
     typeof w.threatLevel === 'number' &&
     typeof w.activeSingletons === 'object' &&

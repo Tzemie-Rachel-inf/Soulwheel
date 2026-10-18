@@ -32,3 +32,5 @@ coverage
 .env.*
 .claude/
 scripts/*-out.txt
+
+.superdesign/tmp/

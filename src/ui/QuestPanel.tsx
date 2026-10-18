@@ -99,12 +99,15 @@ export function ChoicePanel({
   chosenIndex,
   disabled,
   onChoose,
+  thenLabel,
 }: {
   slices: readonly ResolvedSlice[];
   config: GameConfig;
   chosenIndex: number | null;
   disabled: boolean;
   onChoose: (optionId: string) => void;
+  /** What comes after any of these choices, when the options themselves can't say (Keep or Take: the road goes on). */
+  thenLabel?: string;
 }) {
   return (
     <ul className="grid gap-3 sm:grid-cols-2" aria-label="Your choices">
@@ -113,7 +116,7 @@ export function ChoicePanel({
         const Icon = getOptionIcon(option.icon);
         const chosen = chosenIndex === slice.index;
         const effects = describeEffects(option, config);
-        const then = nextLabel(option, config);
+        const then = thenLabel ?? nextLabel(option, config);
         const color = option.color ?? '#6b7280';
         return (
           <li key={option.id}>
@@ -151,6 +154,8 @@ export function ChoicePanel({
 /** "Then: spin The Theft", or what happens if nothing else does. */
 function nextLabel(option: WheelOption, config: GameConfig): string {
   const next = option.nextStepId;
+  if (option.evade === 'fight') return 'Then: the fight';
+  if (option.evade === 'escape') return 'Then: past the fight, and onward';
   if (next === null) return option.setStatus ? 'Then: the story ends' : 'Then: the quest ends';
   if (typeof next !== 'string') return 'Certain. Then the quest goes on';
   const step = findStep(config, next);

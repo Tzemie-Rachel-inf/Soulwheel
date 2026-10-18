@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, RotateCcw, Shuffle } from 'lucide-react';
 import { MAX_ARMOR_TIER, MAX_WEAPON_TIER, applyOption } from '../engine/character';
+import { armorPower, equip, slotOf, temper, weaponPower } from '../engine/gear';
 import { fameStanding } from '../engine/fame';
 import { rollFullCharacter } from '../engine/generation';
 import { dealOptions, fightOdds } from '../engine/odds';
@@ -597,22 +598,22 @@ function SubjectPanel({ config, world, labWorld, subject, onChange, threat, onTh
         onChange={(luck) => onChange({ ...subject, luck })}
       />
       <Slider
-        label="Weapon tier"
-        value={subject.weaponTier}
+        label={`Weapon power${subject.weapon ? ` (${subject.weapon.name})` : ''}`}
+        value={weaponPower(subject)}
         min={0}
         max={MAX_WEAPON_TIER}
         step={1}
         format={String}
-        onChange={(weaponTier) => onChange({ ...subject, weaponTier })}
+        onChange={(power) => onChange(withGearPower(subject, 'weapon', power, config))}
       />
       <Slider
-        label="Armour tier"
-        value={subject.armorTier}
+        label={`Armour power${subject.armor ? ` (${subject.armor.name})` : ''}`}
+        value={armorPower(subject)}
         min={0}
         max={MAX_ARMOR_TIER}
         step={1}
         format={String}
-        onChange={(armorTier) => onChange({ ...subject, armorTier })}
+        onChange={(power) => onChange(withGearPower(subject, 'armor', power, config))}
       />
       <Slider
         label={`Fame (${fameStanding(config.fame.tiers, subject.fame).tier.name})`}
@@ -746,4 +747,12 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
       ))}
     </div>
   );
+}
+
+/** The subject with a slot set to this power: emptied at 0, the item they have re-forged, or a plain one made. */
+function withGearPower(subject: Character, kind: 'weapon' | 'armor', power: number, config: GameConfig): Character {
+  const item = slotOf(subject, kind);
+  if (power === 0) return equip(subject, kind, null, config);
+  if (item) return equip(subject, kind, { ...item, power }, config);
+  return temper(subject, kind, power, config);
 }

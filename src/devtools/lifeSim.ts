@@ -12,11 +12,12 @@
  * Pure over the engine: nothing is saved anywhere.
  */
 import { canAdventure, completeAdventure, isWhoStep, rollFullAdventure } from '../engine/adventure';
+import { isBattleStep } from '../engine/battle';
 import { fameStanding } from '../engine/fame';
 import { rollFullCharacter } from '../engine/generation';
 import { calculatePowerRating } from '../engine/power';
 import { createSeededRng, type Rng } from '../engine/rng';
-import { RARITIES, STAT_KEYS, type Character, type GameConfig, type Rarity, type RollRecord, type WheelOption, type World } from '../engine/types';
+import { RARITIES, STAT_KEYS, type Character, type GameConfig, type Rarity, type RollRecord, type SpellMode, type WheelOption, type World } from '../engine/types';
 import { commitCharacter, createWorld, findCharacter, playerHero } from '../engine/world';
 import { chronicleAdventure } from '../state/chronicle';
 import { worldTurn } from '../state/worldTurn';
@@ -35,6 +36,8 @@ export interface LifeRecord {
   name: string;
   startRace: string | null;
   endRace: string | null;
+  /** How fate treats them (their archetype's id), if they have one. */
+  archetype: string | null;
   startCp: number;
   endCp: number;
   adventures: number;
@@ -60,6 +63,11 @@ export interface LifeRecord {
   placeReturns: number;
   ending: string;
   remarkableEnding: boolean;
+  /** Boss battles fought, and won; their rounds; how deep each Crit Cascade chained (1–4). */
+  battles: number;
+  battlesWon: number;
+  battleRounds: number;
+  cascades: number[];
   fame: number;
   fameTier: string;
   highlights: Highlight[];
@@ -71,19 +79,21 @@ export interface SimOptions {
   seed: number;
   /** A safety cap on one life. */
   maxAdventures?: number;
+  /** How boss battles cast spells (default: the config's). */
+  spellMode?: SpellMode;
 }
 
 const HYPE: readonly Rarity[] = ['epic', 'legendary', 'mythical'];
 const rarityRank = (r: Rarity) => RARITIES.indexOf(r);
 
 /** Live `heroesPerWorld` heroes in each of `worlds` fresh worlds. */
-export function simulateLives(config: GameConfig, { worlds, heroesPerWorld, seed, maxAdventures = 60 }: SimOptions): LifeRecord[] {
+export function simulateLives(config: GameConfig, { worlds, heroesPerWorld, seed, maxAdventures = 60, spellMode }: SimOptions): LifeRecord[] {
   const lives: LifeRecord[] = [];
   for (let w = 0; w < worlds; w++) {
     const rng = createSeededRng(seed + w * 7919);
     let world = createWorld({ rng, now: 0 });
     for (let h = 0; h < heroesPerWorld; h++) {
-      const lived = liveOneLife(config, world, rng, w, maxAdventures);
+      const lived = liveOneLife(config, world, rng, w, maxAdventures, spellMode);
       if (!lived) break;
       world = lived.world;
       lives.push(lived.record);
@@ -93,7 +103,7 @@ export function simulateLives(config: GameConfig, { worlds, heroesPerWorld, seed
 }
 
 /** Roll souls until one is a hero, then live their whole story. */
-function liveOneLife(config: GameConfig, start: World, rng: Rng, worldIndex: number, maxAdventures: number): { world: World; record: LifeRecord } | null {
+function liveOneLife(config: GameConfig, start: World, rng: Rng, worldIndex: number, maxAdventures: number, spellMode?: SpellMode): { world: World; record: LifeRecord } | null {
   let world = start;
   let hero: Character | undefined;
   for (let tries = 0; tries < 20 && !hero; tries++) {
@@ -115,6 +125,7 @@ function liveOneLife(config: GameConfig, start: World, rng: Rng, worldIndex: num
     name: hero.name,
     startRace,
     endRace: startRace,
+    archetype: hero.archetype,
     startCp,
     endCp: startCp,
     adventures: 0,
@@ -130,6 +141,10 @@ function liveOneLife(config: GameConfig, start: World, rng: Rng, worldIndex: num
     placesFound: 0,
     placeReturns: 0,
     ending: 'still adventuring',
+    battles: 0,
+    battlesWon: 0,
+    battleRounds: 0,
+    cascades: [],
     remarkableEnding: false,
     fame: 0,
     fameTier: '',
@@ -139,7 +154,17 @@ function liveOneLife(config: GameConfig, start: World, rng: Rng, worldIndex: num
   let current: Character | undefined = hero;
   while (current && canAdventure(current) && record.adventures < maxAdventures) {
     const before: Character = current;
-    const { state, spins } = rollFullAdventure(config, world, before, rng);
+    const { state, spins } = rollFullAdventure(config, world, before, rng, spellMode ? { spellMode } : {});
+    for (const spin of spins) {
+      const battle = spin.state.battle;
+      if (!isBattleStep(spin.step.id) || !battle) continue;
+      record.battleRounds += 1;
+      if (battle.last?.kind === 'crit' && battle.last.cascade) record.cascades.push(battle.last.cascade.length);
+      if (battle.verdict) {
+        record.battles += 1;
+        if (battle.verdict === 'win') record.battlesWon += 1;
+      }
+    }
     const n = record.adventures + 1;
     record.adventures = n;
     record.spins += spins.length;
@@ -228,7 +253,7 @@ function isDoorway(option: WheelOption): boolean {
 function isFlavorOnly(before: Character, after: Character): boolean {
   if (after.status !== 'alive' || after.role !== before.role || after.race !== before.race) return false;
   if (after.expedition) return false;
-  if (after.traits.length !== before.traits.length || after.weaponTier !== before.weaponTier || after.armorTier !== before.armorTier) return false;
+  if (after.traits.length !== before.traits.length || after.weapon?.id !== before.weapon?.id || after.armor?.id !== before.armor?.id || after.weapon?.power !== before.weapon?.power || after.armor?.power !== before.armor?.power) return false;
   if (after.tags.length !== before.tags.length) return false;
   const moved = STAT_KEYS.reduce((sum, key) => sum + Math.abs(after.stats[key] - before.stats[key]), 0);
   return moved <= 2;
@@ -290,6 +315,11 @@ export interface SimSummary {
   forgettable: number;
   highlightsHistogram: Record<string, number>;
   hypePerLife: number;
+  battles: number;
+  battleWinRate: number;
+  roundsPerBattle: number;
+  /** Crit Cascades by how many wheels they stacked. */
+  cascadeDepths: Record<string, number>;
   endings: Record<string, number>;
 }
 
@@ -332,6 +362,10 @@ export function summarize(lives: readonly LifeRecord[]): SimSummary {
     forgettable: count((r) => !isStrict(r) && r.callbacks < 2 && r.flavorOnly * 2 >= r.adventures),
     highlightsHistogram: histogram,
     hypePerLife: share(lives.reduce((s, r) => s + r.hype, 0), lives.length),
+    battles: lives.reduce((s, r) => s + r.battles, 0),
+    battleWinRate: share(lives.reduce((s, r) => s + r.battlesWon, 0), lives.reduce((s, r) => s + r.battles, 0)),
+    roundsPerBattle: share(lives.reduce((s, r) => s + r.battleRounds, 0), lives.reduce((s, r) => s + r.battles, 0)),
+    cascadeDepths: lives.flatMap((r) => r.cascades).reduce<Record<string, number>>((h, d) => ({ ...h, [d]: (h[d] ?? 0) + 1 }), {}),
     endings,
   };
 }

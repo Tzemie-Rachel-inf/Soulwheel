@@ -11,6 +11,7 @@ import { dealOptions } from './odds';
 import { loadWorld, type StorageLike } from './persistence';
 import { createSeededRng } from './rng';
 import { resolveSlices } from './roll';
+import { plainItem } from './testConfig';
 import type { Character, ResolvedSlice, World } from './types';
 import { commitCharacter, createWorld, placeCharacter, playerHero } from './world';
 
@@ -81,7 +82,7 @@ describe('one hero at a time', () => {
     const { heroId: _heroId, ...v8 } = { ...world(), schemaVersion: 8, roster: [newer, older] };
     storage.setItem('roguelite.world', JSON.stringify(v8));
     const loaded = loadWorld(storage)!;
-    expect(loaded.schemaVersion).toBe(9);
+    expect(loaded.schemaVersion).toBe(10);
     expect(loaded.heroId).toBe(newer.id);
     expect(loaded.roster).toHaveLength(2);
   });
@@ -133,8 +134,8 @@ describe('Master a Power: a ladder, like Train', () => {
   });
 });
 
-describe('gear: a found item is kept only if it beats what they carry', () => {
-  const armed = (weaponTier: number): Character => ({ ...alive(), weaponTier });
+describe('gear: a found item is offered, never swapped in by itself', () => {
+  const armed = (power: number): Character => ({ ...alive(), weapon: power > 0 ? plainItem('weapon', power) : null });
 
   it('locks weapons on Find a Weapon that are no better than theirs', () => {
     const open = slices('find_weapon', armed(2)).filter((s) => !s.locked).map((s) => s.option.id);
@@ -143,20 +144,24 @@ describe('gear: a found item is kept only if it beats what they carry', () => {
     expect(open).toContain('heirloom');
   });
 
-  it('replaces their weapon with a better one, never stacks on it', () => {
-    expect(take(armed(2), 'find_weapon', 'heirloom').weaponTier).toBe(3);
-    expect(take(armed(0), 'find_weapon', 'rusty_blade').weaponTier).toBe(1);
+  it('takes a weapon into empty hands at once, and offers one to full hands', () => {
+    expect(take(armed(0), 'find_weapon', 'rusty_blade').weapon?.power).toBe(1);
+    const offered = take(armed(2), 'find_weapon', 'heirloom');
+    expect(offered.weapon?.power).toBe(2); // not swapped: the player keeps theirs or takes it
+    expect(offered.gearOffers?.map((o) => o.power)).toEqual([3]);
   });
 
-  it('keeps the better blade when treasure turns up a worse one', () => {
-    expect(take(armed(4), 'treasure', 'gem_blade').weaponTier).toBe(4);
-    expect(take(armed(1), 'treasure', 'gem_blade').weaponTier).toBe(2);
+  it('offers treasure’s blade even when it is worse: the choice is theirs', () => {
+    const richer = take(armed(4), 'treasure', 'gem_blade');
+    expect(richer.weapon?.power).toBe(4);
+    expect(richer.gearOffers?.[0]?.power).toBe(2);
+    expect(take(armed(1), 'treasure', 'gem_blade').gearOffers?.[0]?.power).toBe(2);
   });
 
   it('stops sending a hero to look once nothing found could beat their gear', () => {
     expect(slice('crossroads', 'find_weapon', armed(5))!.locked).toBe(true);
     expect(slice('crossroads', 'find_weapon', armed(4))!.locked).toBe(false);
-    expect(slice('crossroads', 'find_armor', { ...alive(), armorTier: 5 })!.locked).toBe(true);
+    expect(slice('crossroads', 'find_armor', { ...alive(), armor: plainItem('armor', 5) })!.locked).toBe(true);
   });
 });
 

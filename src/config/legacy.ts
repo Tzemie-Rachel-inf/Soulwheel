@@ -25,7 +25,8 @@
  * martyr's grave becomes a shrine. A soul bound to a relic waits, sealed, for someone to find it.
  */
 import { calculatePowerRating } from '../engine/power';
-import type { CastSpoils, Character, Trait, WheelOption, WheelStep, World } from '../engine/types';
+import type { CastSpoils, Character, GearItem, Trait, WheelOption, WheelStep, World } from '../engine/types';
+import { UNIQUE_GEAR } from './gear/uniques';
 import {
   FOES,
   IRON_WILL_SAVES,
@@ -99,10 +100,13 @@ export const LEGACY_TRAITS: Record<string, Trait> = Object.fromEntries(
 
 // ─── Taking, teaching, and relics ───────────────────────────────────────────
 
-/** Items no one can take: the Holy Sword chooses its bearer, and will not serve a thief. */
+/** Relics no one can take. (The Holy Sword is one of the gear uniques marked `untakeable`: it chooses its bearer.) */
 const UNTAKEABLE = new Set(['holy_sword']);
-/** The items a character carries that can change hands. */
-export const carriedItems = (char: Character) => char.traits.filter((t) => t.item && !UNTAKEABLE.has(t.id));
+/** The relics a character carries that can change hands. Weapons and armour are gear: see `takeableGear`. */
+export const carriedItems = (char: Character) => char.traits.filter((t) => t.item === 'relic' && !UNTAKEABLE.has(t.id));
+/** Their weapon or armour, if it can change hands (the Holy Sword will not serve a thief). */
+export const takeableGear = (item: GearItem | null): GearItem | null =>
+  item && !(item.uniqueId && (UNIQUE_GEAR[item.uniqueId]?.untakeable || UNTAKEABLE.has(item.uniqueId))) ? item : null;
 
 const firstName = (char: Character) => char.name.split(' ')[0] || 'Someone';
 const listing = (parts: string[]) => (parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`);
@@ -114,28 +118,30 @@ const handed = (item: Trait, how: string, from: Character): Trait => ({
   description: `${item.description.replace(PROVENANCE, '')} ${how} ${from.name}.`,
 });
 
-/** What changes hands when `kinds` of gear go from `from` to `to`: better gear, and every item of those kinds. */
+/** An item as it changes hands: only the latest hand is remembered. */
+const handedGear = (item: GearItem, how: string, from: Character): GearItem => ({ ...item, foundFrom: `${how} ${from.name}` });
+
+/**
+ * What changes hands when `kinds` of gear go from `from` to `to`: their weapon and armour (offered:
+ * the hero keeps their own or takes it), and every relic, if relics go too.
+ */
 function transfer(from: Character, to: Character, kinds: readonly ('weapon' | 'armor' | 'relic')[], how: string, verb: string): CastSpoils {
-  const items = carriedItems(from).filter((t) => kinds.includes(t.item!));
+  const items = kinds.includes('relic') ? carriedItems(from) : [];
   const gained = items.filter((t) => !hasTrait(to, t.id));
-  const weapon = kinds.includes('weapon') && from.weaponTier > to.weaponTier;
-  const armor = kinds.includes('armor') && from.armorTier > to.armorTier;
-  const parts = [
-    ...gained.map((t) => t.name),
-    ...(weapon ? [`a tier ${from.weaponTier} weapon`] : []),
-    ...(armor ? [`tier ${from.armorTier} armour`] : []),
-  ];
+  const weapon = kinds.includes('weapon') ? takeableGear(from.weapon) : null;
+  const armor = kinds.includes('armor') ? takeableGear(from.armor) : null;
+  const parts = [...gained.map((t) => t.name), ...(weapon ? [weapon.name] : []), ...(armor ? [armor.name] : [])];
   return {
     traits: gained.map((t) => handed(t, how, from)),
-    ...(kinds.includes('weapon') && { weaponTier: from.weaponTier }),
-    ...(kinds.includes('armor') && { armorTier: from.armorTier }),
+    ...(weapon && { weapon: handedGear(weapon, how, from) }),
+    ...(armor && { armor: handedGear(armor, how, from) }),
     effect: {
-      ...(kinds.includes('weapon') && { weaponTier: 0 }),
-      ...(kinds.includes('armor') && { armorTier: 0 }),
+      ...(weapon && { weapon: null }),
+      ...(armor && { armor: null }),
       ...(items.length > 0 && { loseTraits: items.map((t) => t.id) }),
     },
     summary:
-      parts.length > 0 ? `${verb} ${listing(parts)} from ${from.name}` : `${from.name} carried nothing better than what they already had`,
+      parts.length > 0 ? `${verb} ${listing(parts)} from ${from.name}` : `${from.name} carried nothing worth taking`,
   };
 }
 
@@ -171,8 +177,8 @@ export function passTheTorch(cast: Character, hero: Character): CastSpoils {
   const art = learnTechnique(cast, hero);
   return {
     traits: [...(arms.traits ?? []), ...(art.traits ?? [])],
-    ...(arms.weaponTier !== undefined && { weaponTier: arms.weaponTier }),
-    ...(arms.armorTier !== undefined && { armorTier: arms.armorTier }),
+    ...(arms.weapon && { weapon: arms.weapon }),
+    ...(arms.armor && { armor: arms.armor }),
     ...(arms.effect && { effect: arms.effect }),
     summary: `${cast.name} named them their successor`,
   };
@@ -387,7 +393,7 @@ const RIVAL: WheelStep = {
 
 /** What a settled hero can do for a visitor, by what they do now. Dealt only for that profession. */
 const TRADE: [traitId: string, option: Omit<WheelOption, 'baseWeight' | 'rarity' | 'castCondition' | 'nextStepId'> & Partial<Pick<WheelOption, 'nextStepId'>>][] = [
-  ['npc_blacksmith', { id: 'reforged', label: 'Reforged Their Gear', description: 'An old hero’s hands on a new hero’s blade and mail.', weaponTierDelta: 1, armorTierDelta: 1, color: '#7a4a3a', icon: 'Anvil' }],
+  ['npc_blacksmith', { id: 'reforged', label: 'Reforged Their Gear', description: 'An old hero’s hands on a new hero’s blade and mail.', weaponTierDelta: 1, upgrade: true, armorTierDelta: 1, color: '#7a4a3a', icon: 'Anvil' }],
   ['npc_shopkeeper', { id: 'back_room', label: 'The Back Room', description: 'Not for sale to just anyone: armour from their own adventuring days.', armorTierDelta: 2, color: '#8a7a52', icon: 'Store' }],
   ['npc_innkeeper', { id: 'rumour', label: 'A Rumour Over Ale', description: 'About a chest nobody has found yet.', nextStepId: 'treasure', color: '#b8862e', icon: 'Beer' }],
   ['npc_farmer', { id: 'hospitality', label: 'A Hot Meal and a Warm Bed', description: 'The best night’s sleep in a year.', statModifiers: { vitality: 2 }, color: '#8ac46a', icon: 'Wheat' }],
@@ -810,7 +816,7 @@ const LEGACY_FIGHTS: WheelStep[] = [
       { id: 'dragon_against_wyrm', label: 'Dragon Against Wyrm', description: 'Their own dragon met it in the sky, and they struck while it was busy.', requiresTrait: ['dragon_bond', 'companion_dragon', 'draconic_blood'], grantTraits: ['wyrm_slayer'], icon: 'Egg' },
     ],
     victory: { label: 'Wyrm-Slayer', description: 'The first dragon is dead. The rest have heard.', rarity: 'common', grantTraits: ['wyrm_slayer'] },
-    glory: { label: 'Clad in Wyrmscale', description: 'Its hide, made into armour no fire can touch.', rarity: 'legendary', grantTraits: ['wyrm_slayer', 'wyrmscale'], armorTierDelta: 3, epithet: { text: 'the Wyrmscaled', priority: 75 } },
+    glory: { label: 'Clad in Wyrmscale', description: 'Its hide, made into armour no fire can touch.', rarity: 'legendary', grantTraits: ['wyrm_slayer'], gear: { armor: { unique: 'wyrmscale' } }, epithet: { text: 'the Wyrmscaled', priority: 75 } },
     retreat: { label: 'Barely Escaped', description: 'Through a crack in the mountain, smoking.', statModifiers: { vitality: -5 }, grantTags: ['scarred'] },
     slain: { label: 'Swallowed Whole', description: 'It did not even chew.' },
   }),

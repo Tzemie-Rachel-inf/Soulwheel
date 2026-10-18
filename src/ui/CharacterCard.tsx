@@ -4,15 +4,16 @@
  * Everything shown is derived from the Character record plus config lookups.
  * Combat Power is recomputed here, never read from storage.
  */
-import { useEffect, useState, type CSSProperties } from 'react';
+import { HealthGauge } from './Stakes';
+import { useEffect, useId, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Copy, ImageDown, X } from 'lucide-react';
 import { findStep } from '../engine/adventure';
-import { MAX_ARMOR_TIER, MAX_WEAPON_TIER } from '../engine/character';
-import { ARMOR_STAT, getPowerBreakdown, statScale, traitPower, weaponStat } from '../engine/power';
+import { getPowerBreakdown, statScale, traitPower } from '../engine/power';
 import { RARITIES, STAT_KEYS, type AdventureRecord, type Character, type GameConfig, type RollRecord, type StatKey, type Trait } from '../engine/types';
 import { CountUp } from './CountUp';
 import { FameMeter } from './FameMeter';
+import { GearCard } from './GearCard';
 import { Epitaph } from './Headstone';
 import { STAT_LABELS, displayName, formatOdds, humanizeKey, heroRace, roleLabel, signed } from './format';
 import { RARITY_STYLES, rarityOf, statRarity } from './rarity';
@@ -37,6 +38,8 @@ const BREAKDOWN = [
 ] as const;
 
 export function CharacterCard({ character, previous, config, status, onClose }: CharacterCardProps) {
+  // Unique: on a phone the same card can stand in the page and in the hero sheet.
+  const nameId = useId();
   const power = getPowerBreakdown(character);
   const before = previous ? getPowerBreakdown(previous) : null;
   const cpDelta = before ? power.total - before.total : 0;
@@ -48,13 +51,15 @@ export function CharacterCard({ character, previous, config, status, onClose }: 
   const archetype = character.archetype ? config.archetypes[character.archetype] : undefined;
   const rolled = rolledStats(character, config);
   const rolledBefore = previous ? rolledStats(previous, config) : rolled;
+  // A weapon's or armour's abilities are listed with it, above.
+  const ownTraits = character.traits.filter((t) => t.item !== 'weapon' && t.item !== 'armor');
 
   return (
-    <section aria-labelledby="character-name" className="court-panel">
+    <section aria-labelledby={nameId} className="court-panel">
       <header className="flex items-start gap-3 px-5 pb-4 pt-5">
         <div className="min-w-0 flex-1">
           <h2
-            id="character-name"
+            id={nameId}
             className={`font-display text-3xl leading-tight ${character.name ? 'text-candle' : 'text-ash'}`}
           >
             {displayName(character, config)}
@@ -69,6 +74,7 @@ export function CharacterCard({ character, previous, config, status, onClose }: 
           {archetype && (
             <p className="text-sm text-vellum">
               {archetype.name}
+              {(character.decrees ?? 0) > 0 && <span className="text-gilt-bright"> · {character.decrees} decree left</span>}
               <span className="text-ash"> · {archetype.description}</span>
             </p>
           )}
@@ -134,6 +140,9 @@ export function CharacterCard({ character, previous, config, status, onClose }: 
             </span>
           )}
         </p>
+        <div className="mt-3" title="Health: fights take it; every roll, the days between adventures and a good rest give it back">
+          <HealthGauge character={character} size="sm" />
+        </div>
         <div
           className="mt-4 flex h-2.5 gap-0.5 overflow-hidden rounded-r-[4px]"
           role="img"
@@ -238,39 +247,19 @@ export function CharacterCard({ character, previous, config, status, onClose }: 
         )}
       </div>
 
-      <div className="border-t-2 border-lead px-5 py-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <h3 className="shrink-0 whitespace-nowrap font-caps text-base tracking-wide text-ash">Weapon tier</h3>
-          <p className="text-right text-sm text-ash">
-            <span className="tabular-nums text-vellum">{character.weaponTier}</span> of {MAX_WEAPON_TIER}, worth{' '}
-            <span className="tabular-nums text-vellum">{power.weapon}</span> CP
-            {character.weaponTier > 0 && power.weaponScale !== 1 && (
-              <span> (×{roundScale(power.weaponScale)} from {STAT_LABELS[weaponStat(character)]})</span>
-            )}
-          </p>
-        </div>
-        <TierPips filled={character.weaponTier} max={MAX_WEAPON_TIER} on="bg-cp-weapon" off="border-cp-weapon/45" />
-        <div className="mt-4 flex items-baseline justify-between gap-3">
-          <h3 className="shrink-0 whitespace-nowrap font-caps text-base tracking-wide text-ash">Armour tier</h3>
-          <p className="text-right text-sm text-ash">
-            <span className="tabular-nums text-vellum">{character.armorTier}</span> of {MAX_ARMOR_TIER}, worth{' '}
-            <span className="tabular-nums text-vellum">{power.armor}</span> CP
-            {character.armorTier > 0 && power.armorScale !== 1 && (
-              <span> (×{roundScale(power.armorScale)} from {STAT_LABELS[ARMOR_STAT]})</span>
-            )}
-          </p>
-        </div>
-        <TierPips filled={character.armorTier} max={MAX_ARMOR_TIER} on="bg-cp-armor" off="border-cp-armor/45" />
+      <div className="grid gap-5 border-t-2 border-lead px-5 py-4">
+        <GearCard kind="weapon" item={character.weapon} character={character} config={config} />
+        <GearCard kind="armor" item={character.armor} character={character} config={config} />
       </div>
 
       <div className="border-t-2 border-lead px-5 py-4">
         <h3 className="font-caps text-base tracking-wide text-ash">Traits</h3>
-        {character.traits.length === 0 ? (
+        {ownTraits.length === 0 ? (
           <p className="mt-1 text-sm text-ash">None yet. The wheels decide what this soul carries.</p>
         ) : (
           <ul className="mt-2 grid gap-3">
             <AnimatePresence initial={false}>
-              {character.traits.map((trait) => (
+              {ownTraits.map((trait) => (
                 <motion.li
                   key={trait.id}
                   layout
@@ -532,7 +521,8 @@ const ITEM_LABELS: Record<NonNullable<Trait['item']>, string> = { weapon: 'Weapo
  * The stats a character has rolled. Only a character still being rolled has unrolled
  * stats; anyone in the world counts as having them all (older saves predate stat wheels).
  */
-function rolledStats(char: Character, config: GameConfig): Set<StatKey> {
+/** The stats this character has rolled so far (all of them, once creation is over). */
+export function rolledStats(char: Character, config: GameConfig): Set<StatKey> {
   if (char.status !== 'rolling') return new Set(STAT_KEYS);
   const keys = char.history.flatMap((roll) => Object.keys(lookupRoll(config, roll).option?.setStats ?? {}));
   return new Set(keys as StatKey[]);
@@ -541,20 +531,8 @@ function rolledStats(char: Character, config: GameConfig): Set<StatKey> {
 /** The wheel and option a roll points at, retirement wheel included. Either may be gone after a config change. */
 function lookupRoll(config: GameConfig, roll: RollRecord) {
   const step = findStep(config, roll.stepId);
-  return { step, option: step?.options.find((o) => o.id === roll.optionId) };
+  // A Dreamer's Miracle or Nightmare ('id~miracle') isn't in the config: it stands for its source option.
+  const id = roll.optionId.split('~')[0];
+  return { step, option: step?.options.find((o) => o.id === roll.optionId) ?? step?.options.find((o) => o.id === id) };
 }
 
-/** Tiers as a row of lozenges on a gilt rule: filled in the tier's colour, empty ones outlined. */
-function TierPips({ filled, max, on, off }: { filled: number; max: number; on: string; off: string }) {
-  return (
-    <div className="relative mt-3 flex justify-between px-1" aria-hidden="true">
-      <span className="absolute inset-x-0 top-1/2 h-px bg-gilt-deep" />
-      {Array.from({ length: max }, (_, i) => (
-        <span
-          key={i}
-          className={`relative size-2.5 rotate-45 border transition-colors duration-500 ${i < filled ? `${on} border-gilt-bright/70` : `bg-slab ${off}`}`}
-        />
-      ))}
-    </div>
-  );
-}

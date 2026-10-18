@@ -27,22 +27,42 @@ function getStorage(): StorageLike | null {
 
 export type CommitResult = { ok: true; world: World } | { ok: false; message: string };
 
+/**
+ * Whether the world is reaching the browser's storage. 'unavailable': there is none to write to
+ * (a private window, blocked site data); 'failed': the last save was refused (storage full, most
+ * likely, as a long world's graveyard and chronicle grow). Either way the world keeps running,
+ * but only in this tab.
+ */
+export type SaveStatus = 'saved' | 'unavailable' | 'failed';
+
 export function useWorld(config: GameConfig) {
   const [world, setWorld] = useState<World>(() => {
     const storage = getStorage();
-    const loaded = storage && loadWorld(storage);
+    const loaded = storage && loadWorld(storage, config);
     return loaded ? backfillChronicle(loaded, config) : createWorld();
   });
 
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>(() => (getStorage() ? 'saved' : 'unavailable'));
+  /** Bumped to try a refused save again. */
+  const [saveAttempt, setSaveAttempt] = useState(0);
+
+  // Every change is written at once. When it can't be, the world keeps running in memory, and the
+  // player is told (see SaveWarning): closing the tab would otherwise end their hero's life silently.
   useEffect(() => {
     const storage = getStorage();
-    if (!storage) return;
-    try {
-      saveWorld(world, storage);
-    } catch {
-      // Quota exceeded or storage revoked: the world keeps running in memory.
+    let status: SaveStatus = 'unavailable';
+    if (storage) {
+      try {
+        saveWorld(world, storage);
+        status = 'saved';
+      } catch {
+        status = 'failed';
+      }
     }
-  }, [world]);
+    setSaveStatus((was) => (was === status ? was : status));
+  }, [world, saveAttempt]);
+
+  const retrySave = useCallback(() => setSaveAttempt((n) => n + 1), []);
 
   /** Place a finished character in the world. Writes any one-of-a-kind roles it claimed. */
   const commit = useCallback(
@@ -92,5 +112,5 @@ export function useWorld(config: GameConfig) {
 
   const resetWorld = useCallback(() => setWorld(createWorld()), []);
 
-  return { world, commit, finishAdventure, setThreatLevel, resetWorld };
+  return { world, commit, finishAdventure, setThreatLevel, resetWorld, saveStatus, retrySave };
 }

@@ -1,5 +1,6 @@
+import { archetypeWheels } from './archetypes';
 import { STAT_BASELINE } from './power';
-import { RARITIES, STAT_KEYS, type GameConfig, type Rarity, type WheelOption, type WheelStep } from './types';
+import { DAMAGE_TYPES, RARITIES, STAT_KEYS, type GameConfig, type GearGrant, type LootTable, type Rarity, type WheelOption, type WheelStep } from './types';
 
 export interface ValidationReport {
   /** The config is broken: a spin will throw. */
@@ -18,7 +19,8 @@ export interface ValidationReport {
  *           that casts no one, a cast on an entry wheel, race or archetype odds or a family naming
  *           something that doesn't exist, a queued spin on a wheel that doesn't exist, no fallback
  *           names, a registry key that doesn't match its id, fame tiers out of order, spoils or a
- *           cast condition on a wheel that casts no one.
+ *           cast condition on a wheel that casts no one, a gear grant or loot table naming an unknown
+ *           unique, base or ability or a power outside 1–10, a gear ability granted as a bare trait.
  * Warnings: a wheel that some character or world could make unspinnable (NO_ELIGIBLE_OPTIONS),
  *           a rarer option that outweighs a more common one, a life-ending option whose
  *           nextStepId would be ignored, unreachable wheels, and cycles (allowed, but
@@ -158,8 +160,12 @@ export function validateGameConfig(config: GameConfig): ValidationReport {
       for (const [omen, k] of Object.entries(option.omenScaling ?? {})) {
         if (!(Number.isFinite(k) && k >= 0)) errors.push(`${where}: omenScaling for "${omen}" must be a number from 0.`);
       }
-      for (const [kind, tier] of Object.entries(option.gear ?? {})) {
-        if (!(Number.isInteger(tier) && tier >= 1)) errors.push(`${where}: gear ${kind} tier must be a whole number from 1.`);
+      for (const [kind, grant] of Object.entries(option.gear ?? {})) {
+        errors.push(...gearGrantErrors(config, `${where}: gear ${kind}`, kind, grant));
+      }
+      for (const id of option.grantTraits ?? []) {
+        const item = config.traits[id]?.item;
+        if (item === 'weapon' || item === 'armor') errors.push(`${where}: "${id}" comes with a ${item === 'weapon' ? 'weapon' : 'suit of armour'}; grant the item (gear) instead of the trait.`);
       }
       for (const [key, cap] of Object.entries(option.statCap ?? {})) {
         if (!(STAT_KEYS as readonly string[]).includes(key)) errors.push(`${where}: statCap names unknown stat "${key}".`);
@@ -243,6 +249,17 @@ export function validateGameConfig(config: GameConfig): ValidationReport {
   for (const meter of config.meters ?? []) visit(meter.trigger, []);
   // So is the road home, by a short adventure.
   if (config.adventure.roadHome) visit(config.adventure.roadHome.stepId, []);
+  // And the evade wheel, by a fight.
+  if (config.adventure.evade) {
+    if (!config.steps[config.adventure.evade.stepId]) errors.push(`adventure.evade: "${config.adventure.evade.stepId}" does not match any wheel.`);
+    visit(config.adventure.evade.stepId, []);
+  }
+
+  // And an archetype's own wheels, by its rules.
+  for (const id of archetypeWheels(config)) {
+    if (!config.steps[id]) errors.push(`An archetype's rules name "${id}", which does not match any wheel.`);
+    visit(id, []);
+  }
 
   for (const key of Object.keys(config.steps)) {
     if (!visited.has(key)) warnings.push(`Wheel "${key}" is unreachable from "${entries.join('" or "')}".`);
@@ -270,7 +287,94 @@ export function validateGameConfig(config: GameConfig): ValidationReport {
     if (event.omen && !(Number.isInteger(event.omen.seasons) && event.omen.seasons >= 1)) errors.push(`World event "${event.id}": an omen lasts a whole number of seasons, at least 1.`);
   }
 
+  errors.push(...gearConfigErrors(config));
+  for (const [key, step] of Object.entries(config.steps)) {
+    if (step.foe?.loot) errors.push(...lootTableErrors(config, `${key}: loot of ${step.foe.name}`, step.foe.loot));
+  }
+
   return { errors, warnings };
+}
+
+const isPower = (n: unknown) => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 10;
+
+/** What is wrong with an option's gear grant: an unknown unique or base, a power outside 1–10. */
+export function gearGrantErrors(config: GameConfig, where: string, kind: string, grant: GearGrant | undefined): string[] {
+  if (grant === undefined) return [];
+  const errors: string[] = [];
+  if (typeof grant === 'number') {
+    if (!isPower(grant)) errors.push(`${where}: power must be a whole number from 1 to 10.`);
+    return errors;
+  }
+  if ('item' in grant) {
+    if (grant.item.kind !== kind) errors.push(`${where}: the item is a ${grant.item.kind}.`);
+    return errors;
+  }
+  if ('better' in grant) {
+    if (!Number.isInteger(grant.better) || grant.better < 1) errors.push(`${where}: "better" must be a whole number of power, 1 or more.`);
+    return errors;
+  }
+  if ('unique' in grant) {
+    const def = config.gear?.uniques[grant.unique];
+    if (!def) errors.push(`${where}: unknown unique gear "${grant.unique}".`);
+    else if (def.kind !== kind) errors.push(`${where}: "${grant.unique}" is a ${def.kind}.`);
+    return errors;
+  }
+  if (!isPower(grant.power)) errors.push(`${where}: power must be a whole number from 1 to 10.`);
+  if (grant.rarity !== undefined && !RARITIES.includes(grant.rarity)) errors.push(`${where}: unknown rarity "${grant.rarity}".`);
+  if (grant.base !== undefined) {
+    const base = config.gear?.bases[grant.base];
+    if (!base) errors.push(`${where}: unknown base "${grant.base}".`);
+    else if (base.kind !== kind) errors.push(`${where}: base "${grant.base}" is a ${base.kind}.`);
+  }
+  if (grant.damage !== undefined && !DAMAGE_TYPES.includes(grant.damage)) errors.push(`${where}: unknown damage type "${grant.damage}".`);
+  return errors;
+}
+
+/** What is wrong with a loot table: weights, power ranges, unknown bases, damage types or uniques, nothing to drop. */
+export function lootTableErrors(config: GameConfig, where: string, table: LootTable): string[] {
+  const errors: string[] = [];
+  if (!(Number.isFinite(table.nothing) && table.nothing >= 0)) errors.push(`${where}: the nothing slice's weight must be a number from 0.`);
+  if (!table.entries.some((e) => e.weight > 0)) errors.push(`${where}: nothing to drop.`);
+  for (const entry of table.entries) {
+    if (!(Number.isFinite(entry.weight) && entry.weight > 0)) errors.push(`${where}: every entry needs a weight above 0.`);
+    if (entry.kind === 'unique') {
+      if (!config.gear?.uniques[entry.id]) errors.push(`${where}: unknown unique gear "${entry.id}".`);
+      continue;
+    }
+    const [lo, hi] = entry.power;
+    if (!isPower(lo) || !isPower(hi) || lo > hi) errors.push(`${where}: a ${entry.kind}'s power range must be whole numbers within 1–10, lowest first.`);
+    for (const id of entry.bases ?? []) {
+      const base = config.gear?.bases[id];
+      if (!base) errors.push(`${where}: unknown base "${id}".`);
+      else if (base.kind !== entry.kind) errors.push(`${where}: base "${id}" is a ${base.kind}.`);
+    }
+    for (const d of entry.damage ?? []) if (!DAMAGE_TYPES.includes(d)) errors.push(`${where}: unknown damage type "${d}".`);
+  }
+  return errors;
+}
+
+/** The gear config itself: bases and uniques registered under their ids, abilities and uniques naming real traits. */
+function gearConfigErrors(config: GameConfig): string[] {
+  const gear = config.gear;
+  if (!gear) return [];
+  const errors: string[] = [];
+  for (const [key, base] of Object.entries(gear.bases)) {
+    if (base.id !== key) errors.push(`Gear base registered as "${key}" has id "${base.id}".`);
+    if (!DAMAGE_TYPES.includes(base.damage)) errors.push(`Gear base "${key}": unknown damage type "${base.damage}".`);
+  }
+  for (const ability of gear.abilities) {
+    if (!config.traits[ability.trait]) errors.push(`Gear ability "${ability.trait}" names no trait.`);
+  }
+  for (const [key, u] of Object.entries(gear.uniques)) {
+    if (u.id !== key) errors.push(`Unique gear registered as "${key}" has id "${u.id}".`);
+    if (!isPower(u.power)) errors.push(`Unique gear "${key}": power must be a whole number from 1 to 10.`);
+    const base = gear.bases[u.base];
+    if (!base) errors.push(`Unique gear "${key}": unknown base "${u.base}".`);
+    else if (base.kind !== u.kind) errors.push(`Unique gear "${key}": base "${u.base}" is a ${base.kind}.`);
+    for (const id of u.abilities) if (!config.traits[id]) errors.push(`Unique gear "${key}": ability "${id}" names no trait.`);
+  }
+  if (gear.materials.length < 10) errors.push('Gear materials: one is needed for every power, 1 to 10.');
+  return errors;
 }
 
 /** Every wheel an option can lead to: its nextStepId, or all of a route's choices. */

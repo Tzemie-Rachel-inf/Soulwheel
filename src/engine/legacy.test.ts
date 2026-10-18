@@ -7,10 +7,12 @@ import { graves, martyrs, rivals, rulers, sealedSouls, townsfolk } from '../conf
 import { GAME_CONFIG as SAMPLE_CONFIG } from '../config/gameConfig';
 import type { GameConfig } from './types';
 import { learnTechnique, takeEverything } from '../config/legacy';
-import { completeAdventure, getAdventureStep, spinAdventure, startAdventure, type AdventureState } from './adventure';
+import { GEAR_STEP_ID, chooseAdventure, completeAdventure, getAdventureStep, spinAdventure, startAdventure, type AdventureState } from './adventure';
 import { MAX_ARMOR_TIER, applyEffects, createCharacter } from './character';
 import { getStep, rollFullCharacter } from './generation';
+import { equip, uniqueGear } from './gear';
 import { calculatePowerRating } from './power';
+import { plainItem } from './testConfig';
 import { createSeededRng } from './rng';
 import { resolveSlices } from './roll';
 import type { Character, Trait, World } from './types';
@@ -48,7 +50,7 @@ describe('armour', () => {
     const world = worldOf();
     for (let i = 0; i < 40; i++) {
       const { character } = rollFullCharacter(GAME_CONFIG, world, rng, { now: 0 });
-      const path = character.history.map((h) => h.stepId);
+      const path = character.history.map((h) => h.stepId).filter((id) => id !== 'gamble'); // a Gambler's coins come between
       if (character.role === 'demonLord') expect(path).not.toContain('outfitter');
       else expect(path).toContain('outfitter');
       if (path.includes('armory')) expect(path.indexOf('outfitter')).toBe(path.indexOf('armory') + 1);
@@ -58,43 +60,56 @@ describe('armour', () => {
   it('keeps armour between bare and the best there is', () => {
     const base = soul(4);
     const up = { id: 'up', label: 'Up', baseWeight: 1, armorTierDelta: 99, nextStepId: null };
-    expect(applyEffects(base, up, 'x', GAME_CONFIG).armorTier).toBe(MAX_ARMOR_TIER);
-    expect(applyEffects({ ...base, armorTier: 2 }, { ...up, armorTierDelta: -5 }, 'x', GAME_CONFIG).armorTier).toBe(0);
+    expect(applyEffects(base, up, 'x', GAME_CONFIG).armor?.power).toBe(MAX_ARMOR_TIER);
+    expect(applyEffects({ ...base, armor: plainItem('armor', 2) }, { ...up, armorTierDelta: -5 }, 'x', GAME_CONFIG).armor).toBeNull(); // worn to nothing, it breaks
   });
 });
 
 describe('taking from the dead and the living', () => {
-  const dead = soul(10, {
-    status: 'fallen',
-    weaponTier: 7,
-    armorTier: 5,
-    traits: [trait('legendary_weapon'), trait('holy_sword'), trait('skill_tracking')],
-    fate: { at: 1, summary: 'Fell on adventure 4' },
-  });
-  const hero = soul(11, { weaponTier: 2, armorTier: 1, fame: 10 });
+  const dead = equip(
+    soul(10, {
+      status: 'fallen',
+      armor: plainItem('armor', 5),
+      traits: [trait('old_kings_relic'), trait('skill_tracking')],
+      fate: { at: 1, summary: 'Fell on adventure 4' },
+    }),
+    'weapon',
+    uniqueGear(GAME_CONFIG.gear!, 'holy_sword'),
+    GAME_CONFIG,
+  );
+  const hero = soul(11, { weapon: plainItem('weapon', 2), armor: plainItem('armor', 1), fame: 10 });
 
   it('hands over a grave’s gear and items to whoever robs it, and the dead keep nothing', () => {
     const world = worldOf(hero, dead);
-    const state = land(hero, 'grave', 'took_their_gear', world, dead);
-    expect(state.character).toMatchObject({ weaponTier: 7, armorTier: 5, fame: 8 }); // grave robbing costs a little fame
-    const blade = state.character.traits.find((t) => t.id === 'legendary_weapon');
-    expect(blade?.description).toMatch(/Taken from Soul 10\.$/);
-    expect(state.character.traits.some((t) => t.id === 'holy_sword')).toBe(false); // it will not serve a thief
-    expect(state.character.traits.some((t) => t.id === 'skill_tracking')).toBe(false); // skills are not items
-    expect(state.rolls.at(-1)?.note).toBe('Took Legendary Weapon, a tier 7 weapon and tier 5 armour from Soul 10');
+    const robbing = land(hero, 'grave', 'took_their_gear', world, dead);
+    expect(robbing.character.fame).toBe(8); // grave robbing costs a little fame
+    const relic = robbing.character.traits.find((t) => t.id === 'old_kings_relic');
+    expect(relic?.description).toMatch(/Taken from Soul 10\.$/);
+    expect(robbing.character.weapon?.uniqueId).toBeUndefined(); // the Holy Sword will not serve a thief
+    expect(robbing.character.traits.some((t) => t.id === 'skill_tracking')).toBe(false); // skills are not items
+    expect(robbing.rolls.at(-1)?.note).toBe('Took Relic of the Old Kings and Test armor 5 from Soul 10');
+    // Their armour is offered, not swapped in: the hero decides.
+    expect(robbing.currentStepId).toBe(GEAR_STEP_ID);
+    expect(robbing.character.armor?.power).toBe(1);
+    const state = chooseAdventure(robbing, GAME_CONFIG, world, 'take').state;
+    expect(state.character.armor).toMatchObject({ power: 5, foundFrom: 'Taken from Soul 10' });
+    expect(state.rolls.at(-1)?.note).toBe('Took Test armor 5; left Test armor 1 behind');
 
     const after = completeAdventure(world, state, 1);
     const robbed = after.graveyard.find((c) => c.id === dead.id)!;
-    expect(robbed).toMatchObject({ weaponTier: 0, armorTier: 0 });
-    expect(robbed.traits.map((t) => t.id)).toEqual(['holy_sword', 'skill_tracking']);
+    expect(robbed.armor).toBeNull();
+    expect(robbed.weapon?.uniqueId).toBe('holy_sword');
+    expect(robbed.traits.map((t) => t.id)).toEqual(['skill_tracking', 'holy_sword', 'gear_blessed']);
   });
 
-  it('says so when there is nothing better to take', () => {
-    const rich = { ...hero, weaponTier: 9, armorTier: 9, traits: [trait('legendary_weapon')] };
+  it('offers their gear even to a hero better armed, and takes their relics all the same', () => {
+    const rich = { ...hero, weapon: plainItem('weapon', 9), armor: plainItem('armor', 9), traits: [trait('old_kings_relic')] };
     const spoils = takeEverything(dead, rich);
-    expect(spoils.summary).toBe('Soul 10 carried nothing better than what they already had');
+    expect(spoils.armor?.power).toBe(5); // offered: the hero keeps their own or takes it
+    expect(spoils.weapon).toBeUndefined(); // the Holy Sword is never offered
     expect(spoils.traits).toEqual([]);
-    expect(spoils.effect?.loseTraits).toEqual(['legendary_weapon']); // taken all the same
+    expect(spoils.effect).toMatchObject({ armor: null, loseTraits: ['old_kings_relic'] }); // taken all the same
+    expect(takeEverything(soul(14, { status: 'fallen' }), rich).summary).toBe('Soul 14 carried nothing worth taking');
   });
 
   it('lets an honourable hero pay respects, but never rob a grave', () => {
@@ -134,14 +149,15 @@ describe('meeting the world’s past heroes', () => {
   });
 
   it('lets a dark heart murder a rival for what they carry', () => {
-    const cruel = soul(24, { personality: 'cruel', weaponTier: 1 });
-    const rival = soul(25, { weaponTier: 6, fame: 30 });
+    const cruel = soul(24, { personality: 'cruel', weapon: plainItem('weapon', 1) });
+    const rival = soul(25, { weapon: plainItem('weapon', 6, 'agility'), fame: 30 });
     const world = worldOf(cruel, rival);
-    const state = land(cruel, 'rival', 'betrayed', world, rival);
-    expect(state.character.tags).toContain('kinslayer');
-    expect(state.character.weaponTier).toBe(6);
+    const betrayed = land(cruel, 'rival', 'betrayed', world, rival);
+    expect(betrayed.character.tags).toContain('kinslayer');
+    const state = chooseAdventure(betrayed, GAME_CONFIG, world, 'take').state;
+    expect(state.character.weapon?.power).toBe(6);
     const after = completeAdventure(world, state, 3);
-    expect(after.graveyard.find((c) => c.id === rival.id)).toMatchObject({ status: 'fallen', weaponTier: 0, fate: { summary: `Murdered by ${cruel.name}` } });
+    expect(after.graveyard.find((c) => c.id === rival.id)).toMatchObject({ status: 'fallen', weapon: null, fate: { summary: `Murdered by ${cruel.name}` } });
   });
 
   it('binds two heroes who swear brotherhood, both of them', () => {
@@ -154,10 +170,10 @@ describe('meeting the world’s past heroes', () => {
 
   it('weighs a duel with a rival at their own Combat Power, and pays fame for it', () => {
     const hero = soul(28);
-    const rival = soul(29, { weaponTier: 4 });
+    const rival = soul(29, { weapon: plainItem('weapon', 4) });
     const state = land(hero, 'fight_rival', 'glory', worldOf(hero, rival), rival);
     expect(state.rolls.at(-1)?.fame).toBe(Math.round((calculatePowerRating(rival) / 25) * 2));
-    expect(state.character.weaponTier).toBe(4); // won their blade
+    expect(state.character.weapon?.power).toBe(4); // won their blade: bare hands take it at once
   });
 });
 
@@ -208,7 +224,7 @@ describe('endings', () => {
   });
 
   it('seals a soul in a relic, for another hero to claim, free, or be taken by', () => {
-    const hero = renowned(35, { weaponTier: 8 });
+    const hero = renowned(35, { weapon: plainItem('weapon', 8) });
     const world = worldOf(hero);
     const sealed = completeAdventure(world, land(hero, 'destiny', 'bound_to_a_relic', world));
     const soulInside = sealed.hallOfFame[0]!;
@@ -240,7 +256,7 @@ describe('endings', () => {
     const hero = renowned(38);
     const world = { ...worldOf(lord, hero), activeSingletons: { demon_lord: lord.id } };
     const fight = getAdventureStep(GAME_CONFIG, 'fight_demon_lord', { cast: { stepId: 'fight_demon_lord', character: lord }, character: hero });
-    expect(fight.foe).toEqual({ name: lord.name, power: calculatePowerRating(lord) });
+    expect(fight.foe).toMatchObject({ name: lord.name, power: calculatePowerRating(lord), battle: true, weak: ['holy'] });
 
     const state = land(hero, 'fight_demon_lord', 'glory', world, lord);
     expect(state.character.status).toBe('victorious');

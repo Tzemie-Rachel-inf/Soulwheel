@@ -56,6 +56,8 @@
 @layer base {
   html {
     scrollbar-color: var(--color-gilt-deep) var(--color-nave);
+    /* Players name their heroes: a 40-letter name with no spaces must wrap, never push a panel wide. */
+    overflow-wrap: break-word;
   }
 }
 
@@ -142,6 +144,51 @@ body {
   }
 
   /* Primary: a plaque of or (heraldic gold), keylined in deep gilt. Flat, as a tincture is. */
+  /* Phones: the hero's bar along the bottom edge (HeroBar.tsx), an ebony board under a gilt rule. */
+  .hero-bar {
+    background: linear-gradient(180deg, var(--color-slab-raised), var(--color-slab) 70%);
+    border-top: 1px solid var(--color-gilt-deep);
+    box-shadow:
+      inset 0 1px 0 rgba(240, 205, 108, 0.22),
+      inset 0 3px 0 var(--color-slab-raised),
+      inset 0 4px 0 rgba(210, 165, 66, 0.18),
+      0 -12px 26px -10px rgba(0, 0, 0, 0.85);
+    transition: background-color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .hero-bar:active {
+    background: var(--color-slab-hover);
+  }
+
+  /* …and the sheet it opens: the full card, rising from the bottom edge. */
+  .hero-sheet {
+    margin: auto 0 0;
+    padding: 0;
+    width: 100%;
+    max-width: none;
+    max-height: 88svh;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    overflow: visible;
+  }
+  .hero-sheet::backdrop {
+    background: rgba(14, 3, 6, 0.72);
+  }
+  .hero-sheet-panel {
+    max-height: 88svh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--color-slab);
+    border-top: 1px solid var(--color-gilt-deep);
+    box-shadow:
+      inset 0 1px 0 rgba(240, 205, 108, 0.22),
+      0 -16px 40px -12px rgba(0, 0, 0, 0.9);
+  }
+  .hero-sheet[open] .hero-sheet-panel {
+    animation: sheet-rise 320ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
   .btn-gilt {
     border: 1px solid var(--color-gilt-deep);
     border-radius: 0;
@@ -288,7 +335,10 @@ body {
     box-shadow: 0 0 8px rgba(240, 205, 108, 0.7);
   }
   .banner-sway {
-    animation: banner-sway 7s ease-in-out infinite;
+    /* Freshly stood under: it drops longer and swings on its rings, then joins the draught. */
+    animation:
+      banner-settle 900ms cubic-bezier(0.16, 1, 0.3, 1),
+      banner-sway 7s ease-in-out 900ms infinite;
   }
   @media (max-width: 40rem) {
     .banner-cloth {
@@ -359,6 +409,67 @@ body {
   }
 }
 
+/* A banner just hung: a swing that dies away. --swing is 1 or -1, the way the player moved. */
+@keyframes banner-settle {
+  0% {
+    transform: rotate(calc(var(--swing, 1) * 3deg));
+  }
+  35% {
+    transform: rotate(calc(var(--swing, 1) * -1.6deg));
+  }
+  65% {
+    transform: rotate(calc(var(--swing, 1) * 0.8deg));
+  }
+  100% {
+    transform: rotate(-0.6deg);
+  }
+}
+
+/* A panel arriving under a new banner: up out of the velvet, quickly. */
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.panel-enter {
+  animation: panel-enter 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
+ * A new wheel's title, lettered in from the left behind a soft edge of light, then its
+ * subtitle. The mask lives only in the keyframes, so nothing is left on the title after.
+ */
+@keyframes inscribe {
+  from {
+    -webkit-mask-image: linear-gradient(90deg, #000 40%, transparent 60%);
+    mask-image: linear-gradient(90deg, #000 40%, transparent 60%);
+    -webkit-mask-size: 250% 100%;
+    mask-size: 250% 100%;
+    -webkit-mask-position: 100% 0;
+    mask-position: 100% 0;
+  }
+  to {
+    -webkit-mask-image: linear-gradient(90deg, #000 40%, transparent 60%);
+    mask-image: linear-gradient(90deg, #000 40%, transparent 60%);
+    -webkit-mask-size: 250% 100%;
+    mask-size: 250% 100%;
+    -webkit-mask-position: 0 0;
+    mask-position: 0 0;
+  }
+}
+@keyframes inscribe-after {
+  from {
+    opacity: 0;
+  }
+}
+.inscribe {
+  animation: inscribe 560ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.inscribe-after {
+  animation: inscribe-after 300ms ease-out 180ms backwards;
+}
+
 /* A banner stirring in the draught of the hall. Pivots from the rod. */
 @keyframes banner-sway {
   0%,
@@ -395,6 +506,124 @@ body {
   animation: rarity-shimmer 3.2s ease-in-out infinite;
 }
 
+/*
+ * The marquee: bulbs set into the wheel's gilt rim (SpinWheel.tsx, Marquee), a casino wheel's
+ * lights in leaf gold. --tint is the bulb's glass: candle gold, or a rare-and-better slice's rarity.
+ */
+.marquee .bulb {
+  fill: var(--tint);
+  stroke: #3a2508;
+  stroke-width: 1;
+}
+/* At rest: a slow, warm two-step chase; rare-and-better bulbs twinkle in their rarity. */
+.marquee[data-mode='idle'] .bulb {
+  animation: bulb-chase 2.4s steps(1) infinite;
+}
+.marquee[data-mode='idle'] .bulb-b {
+  animation-delay: -1.2s;
+}
+.marquee[data-mode='idle'] .bulbs-rare .bulb {
+  animation: bulb-twinkle 1.8s ease-in-out infinite;
+}
+.marquee[data-mode='idle'] .bulbs-rare .bulb-b {
+  animation-delay: -0.9s;
+}
+/* Spinning: every bulb lit, the pairs swapping once per lead line (data-phase, set by the frame loop). */
+.marquee[data-mode='spinning'][data-phase='0'] .bulb-b,
+.marquee[data-mode='spinning'][data-phase='1'] .bulb-a {
+  opacity: 0.25;
+}
+/* Landed: the winner's bulbs flare; the rest go dark, like the glass around them. */
+.marquee[data-mode='landed'] .bulb {
+  fill: #4a3414;
+  opacity: 0.75;
+}
+.marquee[data-mode='landed'] .bulbs-hot .bulb {
+  fill: #fff8e0;
+  stroke: var(--tint);
+  stroke-width: 2;
+  opacity: 1;
+  filter: drop-shadow(0 0 3px var(--tint)) drop-shadow(0 0 8px var(--tint));
+  animation: bulb-flare 1.1s ease-in-out infinite;
+}
+.marquee[data-mode='landed'] .bulbs-hot .bulb-b {
+  animation-delay: -0.55s;
+}
+/* A rare-or-better landing: the whole rim flashes its rarity a few times, then settles. */
+.marquee[data-jackpot] .bulb {
+  animation: bulb-jackpot 0.34s steps(1) 7;
+}
+
+@keyframes bulb-chase {
+  0% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes bulb-twinkle {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes bulb-flare {
+  50% {
+    filter: drop-shadow(0 0 2px var(--tint));
+  }
+}
+@keyframes bulb-jackpot {
+  0% {
+    fill: var(--jackpot);
+    opacity: 1;
+  }
+  50% {
+    fill: #4a3414;
+    opacity: 0.5;
+  }
+}
+
+/* The payout on a result plaque: a coin per rarity tier (RollReveal.tsx). */
+.coin {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 9999px;
+  border: 1px solid var(--color-lead);
+  background: radial-gradient(circle at 35% 30%, #fff0bd, var(--color-gilt) 55%, var(--color-gilt-deep));
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 240, 189, 0.22),
+    0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+/* A jackpot's banner, hung from the top of the plaque like the tabs: gules, gilt-edged, swallowtailed. */
+.jackpot-banner {
+  padding: 0.3rem 1.4rem 0.75rem;
+  background:
+    linear-gradient(var(--color-gilt), var(--color-gilt)) 0 0 / 100% 2px no-repeat,
+    linear-gradient(180deg, var(--color-gules-bright), var(--color-gules) 65%, #5e0f1b);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 0.45rem), 0 100%);
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.6));
+}
+
+/* Light turning slowly behind a jackpot's roundel. */
+.jackpot-rays {
+  background: repeating-conic-gradient(from 0deg, var(--ray) 0 6deg, rgba(0, 0, 0, 0) 6deg 18deg);
+  -webkit-mask: radial-gradient(closest-side, #000 35%, rgba(0, 0, 0, 0) 100%);
+  mask: radial-gradient(closest-side, #000 35%, rgba(0, 0, 0, 0) 100%);
+  opacity: 0.6;
+  animation: jackpot-rays 18s linear infinite;
+}
+@keyframes jackpot-rays {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -406,6 +635,8 @@ body {
   /* Infinite loops at 0.01ms would strobe. Hold the effects still instead. */
   .rarity-twinkle,
   .rarity-pulse,
+  .marquee .bulb,
+  .jackpot-rays,
   .rarity-shimmer,
   .banner-sway {
     animation: none !important;
@@ -419,5 +650,27 @@ body {
   .rarity-shimmer {
     color: var(--color-candle);
     background: none;
+  }
+  /* No swing and no travel: a new title or panel simply fades in. */
+  .inscribe,
+  .panel-enter {
+    animation: inscribe-after 200ms ease-out !important;
   }
+}
+
+@keyframes sheet-rise {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* Scrolls, but shows no bar (the result popup). */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

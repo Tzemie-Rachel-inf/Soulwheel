@@ -7,6 +7,11 @@
  *                         │                      ▲            └──────▶ complete (no wheel left)
  *                         └─(a ladder bump)─▶ upgrading ──upgraded──┘
  *
+ * A Wise soul spins two wheels at once (`SpinSession.wise`): once both have landed the session
+ * waits in `picking` until the player keeps one, then goes on as if only that one had spun.
+ * A Brute's Smash ends a spin early (`smashSpin`): the wheel stops where it is, and the slice
+ * under the pointer is the result.
+ *
  * On a stat ladder with bonuses banked, the wheel first lands where the RNG said; in
  * `upgrading` the UI plays the bump (a hammer knocking the result up a position per point),
  * then the moved result is revealed.
@@ -17,14 +22,18 @@
  *
  * Nothing here branches on wheel ids or option ids. It follows `currentStepId`.
  */
-import { getStep, startGeneration, type GenerationState } from '../engine/generation';
+import { lookupGenerationStep, startGeneration, type GenerationState } from '../engine/generation';
+import { spinSalt } from '../engine/archetypes';
 import { dealOptions } from '../engine/odds';
 import { resolveSlices } from '../engine/roll';
 import type { CreateCharacterOptions } from '../engine/character';
 import type { LadderBump } from '../engine/ladder';
 import type { Character, GameConfig, ResolvedSlice, RollResult, WheelStep, World } from '../engine/types';
 
-export type GenerationPhase = 'ready' | 'spinning' | 'upgrading' | 'revealing' | 'complete';
+export type GenerationPhase = 'ready' | 'spinning' | 'picking' | 'upgrading' | 'revealing' | 'complete';
+
+/** The two wheels a Wise soul spins: left is the first roll, right the second. */
+export type Side = 'left' | 'right';
 
 /** The engine state a session can drive: a character walking a graph of wheels. */
 export interface FlowState {
@@ -41,6 +50,8 @@ export interface FlowOutcome<S extends FlowState> {
   state: S;
   /** How banked bonuses moved a ladder roll after it landed, if they did. */
   bump?: LadderBump | null;
+  /** A Wise soul's second roll of the same wheel (see `SpinSession.wise`). */
+  alt?: FlowOutcome<S>;
 }
 
 export interface SpinSession<S extends FlowState> {
@@ -53,6 +64,11 @@ export interface SpinSession<S extends FlowState> {
   last: FlowOutcome<S> | null;
   /** Increments with every spin. The wheel uses it to tell spins apart. */
   spinCount: number;
+  /**
+   * A Wise soul's two rolls, while they spin and until the next wheel: which have landed, and
+   * which one the player kept (then `pending` is that one).
+   */
+  wise?: { left: FlowOutcome<S>; right: FlowOutcome<S>; landed: Record<Side, boolean>; kept: Side | null };
 }
 
 export type GenerationSession = SpinSession<GenerationState>;
@@ -66,19 +82,50 @@ export function createSession(config: GameConfig, options?: CreateCharacterOptio
   return createFlowSession(startGeneration(config, options));
 }
 
-/** ready → spinning, with the result already known. Ignored in any other phase. */
+/** ready → spinning, with the result already known (both results, for a Wise soul). Ignored in any other phase. */
 export function startSpin<S extends FlowState>(session: SpinSession<S>, outcome: FlowOutcome<S>): SpinSession<S> {
   if (session.phase !== 'ready') return session;
-  return { ...session, phase: 'spinning', pending: outcome, spinCount: session.spinCount + 1 };
+  const { alt, ...left } = outcome;
+  const { wise: _done, ...rest } = session;
+  return {
+    ...rest,
+    phase: 'spinning',
+    pending: alt ? left : outcome,
+    spinCount: session.spinCount + 1,
+    ...(alt && { wise: { left, right: alt, landed: { left: false, right: false }, kept: null } }),
+  };
 }
+
+/** Where a decided result goes once it is shown: the bump first, if banked bonuses move it. */
+const onLanding = (outcome: FlowOutcome<FlowState> | null): GenerationPhase => (outcome?.bump ? 'upgrading' : 'revealing');
 
 /**
  * spinning → revealing once the wheel has stopped, or → upgrading first when banked bonuses
- * move the result. Stale ids (an old spin) are ignored.
+ * move the result. A Wise soul's two wheels each settle (`side`); once both have, → picking.
+ * Stale ids (an old spin) are ignored.
  */
-export function settleSpin<S extends FlowState>(session: SpinSession<S>, spinId: number): SpinSession<S> {
+export function settleSpin<S extends FlowState>(session: SpinSession<S>, spinId: number, side: Side = 'left'): SpinSession<S> {
   if (session.phase !== 'spinning' || spinId !== session.spinCount) return session;
-  return { ...session, phase: session.pending?.bump ? 'upgrading' : 'revealing' };
+  const { wise } = session;
+  if (!wise) return { ...session, phase: onLanding(session.pending) };
+  const landed = { ...wise.landed, [side]: true };
+  return { ...session, phase: landed.left && landed.right ? 'picking' : 'spinning', wise: { ...wise, landed } };
+}
+
+/** picking → revealing (or upgrading): the Wise soul keeps one of their two rolls. Ignored in any other phase. */
+export function pickSpin<S extends FlowState>(session: SpinSession<S>, side: Side): SpinSession<S> {
+  if (session.phase !== 'picking' || !session.wise) return session;
+  const pending = session.wise[side];
+  return { ...session, phase: onLanding(pending), pending, wise: { ...session.wise, kept: side } };
+}
+
+/**
+ * spinning → revealing (or upgrading) at once: a Brute's Smash stopped the wheel, and `outcome` is
+ * the roll decided where it stopped. Stale ids are ignored.
+ */
+export function smashSpin<S extends FlowState>(session: SpinSession<S>, spinId: number, outcome: FlowOutcome<S>): SpinSession<S> {
+  if (session.phase !== 'spinning' || spinId !== session.spinCount || session.wise) return session;
+  return { ...session, phase: onLanding(outcome), pending: outcome };
 }
 
 /** upgrading → revealing, once the bump has played. Stale ids are ignored. */
@@ -91,13 +138,21 @@ export function finishUpgrade<S extends FlowState>(session: SpinSession<S>, spin
 export function advance<S extends FlowState>(session: SpinSession<S>): SpinSession<S> {
   if (session.phase !== 'revealing' || !session.pending) return session;
   const state = session.pending.state;
+  const { wise: _done, ...rest } = session;
   return {
-    ...session,
+    ...rest,
     phase: state.currentStepId === null ? 'complete' : 'ready',
     state,
     pending: null,
     last: session.pending,
   };
+}
+
+/** One of a Wise soul's two wheels, as drawn: its roll, and where it landed (or where the bump moved it, once kept). */
+export interface TwinWheel {
+  slices: ResolvedSlice[];
+  winnerIndex: number;
+  bump: LadderBump | null;
 }
 
 export interface SessionView {
@@ -118,11 +173,14 @@ export interface SessionView {
   previous: Character | null;
   /** True when at least one slice can be rolled. */
   canSpin: boolean;
+  /** A Wise soul's two wheels, while they spin and until the next wheel; which one was kept. */
+  wise?: { left: TwinWheel; right: TwinWheel; kept: Side | null };
 }
 
 /** Everything the creation screen needs, derived from the session plus the current world. */
 export function viewSession(session: GenerationSession, config: GameConfig, world: World): SessionView {
-  return viewFlow(session, config, (stepId) => getStep(config, stepId), world);
+  // As this soul faces it: a Martial soul's spell wheels are training, a Gambler's coin names its stake.
+  return viewFlow(session, config, (stepId) => lookupGenerationStep(config, stepId, session.state.character), world);
 }
 
 /** Everything a spinning screen needs. `lookupStep` turns a wheel id into the wheel to draw. */
@@ -137,7 +195,9 @@ export function viewFlow<S extends FlowState>(
   if (phase === 'ready' && state.currentStepId !== null) {
     const step = lookupStep(state.currentStepId);
     // Dealt to this character first, so luck and fight odds show on the wheel before it spins.
-    const slices = resolveSlices(dealOptions(step, state.character, config), world, state.character);
+    // Dealt exactly as the spin will deal it (a Broken soul's cracks depend on the spin).
+    const dealt = dealOptions(step, state.character, config, { world, salt: spinSalt(state.character, state.stepsTaken) });
+    const slices = resolveSlices(dealt, world, state.character);
     return {
       step,
       slices,
@@ -152,7 +212,13 @@ export function viewFlow<S extends FlowState>(
   const shown = pending ?? last;
   const bump = shown?.bump ?? null;
   const moved = phase === 'revealing' || phase === 'complete';
+  const twin = (side: Side): TwinWheel => {
+    const o = session.wise![side];
+    const kept = session.wise!.kept === side && moved;
+    return { slices: o.roll.slices, winnerIndex: kept && o.bump ? o.bump.to : o.roll.winner.index, bump: o.bump ?? null };
+  };
   return {
+    ...(session.wise && { wise: { left: twin('left'), right: twin('right'), kept: session.wise.kept } }),
     step: shown?.step ?? null,
     slices: shown?.roll.slices ?? [],
     winnerIndex: (moved && bump ? bump.to : shown?.roll.winner.index) ?? null,
