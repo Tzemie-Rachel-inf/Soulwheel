@@ -68,11 +68,156 @@ export interface Trait {
   scalesWith?: StatKey[];
   /** How well it is mastered, once a mastery wheel has honed it ('Virtuoso'). Shown with its name. */
   rank?: string;
+  /** Fights earn this much more fame: 0.25 = a quarter more (a gear ability, a herald's banner). */
+  fameBonus?: number;
+  /** Spoils wheels lean rarer by this many rarity steps, and turn up "nothing" less (a gear ability). */
+  lootLuck?: number;
   /**
-   * A thing they carry rather than something they are: a named blade, a cloak, a crown. Items
-   * can change hands: taken from the dead, stolen from the living, handed down by a legend.
+   * A thing they carry rather than something they are. 'relic': a cloak, a crown, a lantern;
+   * relics change hands as traits (taken from the dead, handed down by a legend). 'weapon' and
+   * 'armor': an ability of the weapon or armour they have equipped (`Character.weapon`), kept in
+   * step with it by engine/gear.ts. These come and go with the item, never on their own.
    */
   item?: 'weapon' | 'armor' | 'relic';
+}
+
+// ─── Gear ───────────────────────────────────────────────────────────────────
+
+/** What a weapon deals, and what armour turns. Stored and shown now; fights read it in a later update. */
+export const DAMAGE_TYPES = ['slashing', 'piercing', 'bludgeoning', 'fire', 'frost', 'lightning', 'holy', 'shadow', 'arcane', 'poison'] as const;
+export type DamageType = (typeof DAMAGE_TYPES)[number];
+
+export type GearKind = 'weapon' | 'armor';
+
+/**
+ * A weapon or a suit of armour: one in hand, one worn (`Character.weapon`, `Character.armor`).
+ * A frozen snapshot, like a trait: an item keeps what it was when it was made.
+ */
+export interface GearItem {
+  /** Unique per item made. */
+  id: string;
+  kind: GearKind;
+  /** 'Frostbitten Steel Longsword of Mending', 'The Holy Sword'. */
+  name: string;
+  /** Id into `GearConfig.bases`: 'longsword', 'plate'. */
+  base: string;
+  /** Set for a predetermined item: id into `GearConfig.uniques`. Only one of each is found in a world. */
+  uniqueId?: string;
+  rarity: Rarity;
+  /** 1–10. Worth `WEAPON_TIER_CP` (or `ARMOR_TIER_CP`) per point, scaled by `stat`. */
+  power: number;
+  /** The stat it is wielded or worn with. */
+  stat: StatKey;
+  /** A weapon: the damage it deals. */
+  damage?: DamageType;
+  /** Armour: the damage it turns. */
+  resists?: DamageType;
+  /** Trait ids (`GameConfig.traits`) it gives whoever has it equipped. */
+  abilities: string[];
+  /** Points of power added (or lost) since it was made: a smith, a deed, a beating. */
+  tempered?: number;
+  /** A line of story, for a unique. */
+  lore?: string;
+  /** Where it came from: 'Taken from the Bridge Troll'. Only the latest hand is remembered. */
+  foundFrom?: string;
+}
+
+/**
+ * What an option hands over. A number: a generated item of that power. `unique`: a
+ * predetermined one. A spec: a generated item within those limits. `item`: this exact item
+ * (a Spoils wheel's slice, a blade taken from someone).
+ */
+export type GearGrant =
+  | number
+  | { unique: string; foundFrom?: string }
+  | { power: number; rarity?: Rarity; base?: string; damage?: DamageType; name?: string; foundFrom?: string }
+  | { item: GearItem }
+  /** A random item this much more powerful than the one in that slot now (power 1 at least, 10 at most). */
+  | { better: number; foundFrom?: string };
+
+/** One line of a loot table. */
+export type LootEntry =
+  | {
+      kind: GearKind;
+      weight: number;
+      /** The lowest and highest power it can roll, 1–10. Rarity then picks within it. */
+      power: [number, number];
+      /** Base ids to choose from. Default: any of that kind. */
+      bases?: string[];
+      /** Damage types (resists, for armour) to choose from. Default: the base's own. */
+      damage?: DamageType[];
+    }
+  | { kind: 'unique'; weight: number; id: string };
+
+/** What a foe can drop. A Spoils wheel is drawn from it after every win. */
+export interface LootTable {
+  /** Weight of the "nothing worth taking" slice. */
+  nothing: number;
+  entries: LootEntry[];
+}
+
+/** A weapon or armour shape, before material and affixes. */
+export interface GearBase {
+  id: string;
+  kind: GearKind;
+  /** 'Longsword'. */
+  name: string;
+  /** The stat it is used with. */
+  stat: StatKey;
+  /** A weapon's damage; armour's resist. */
+  damage: DamageType;
+  /** Lucide icon name, for its slice and its card. */
+  icon: string;
+}
+
+/** A predetermined item: the Holy Sword, the Dragonbone Blade. */
+export interface UniqueGear {
+  id: string;
+  kind: GearKind;
+  name: string;
+  base: string;
+  rarity: Rarity;
+  power: number;
+  stat: StatKey;
+  damage?: DamageType;
+  resists?: DamageType;
+  /** Trait ids, its signature ability first. */
+  abilities: string[];
+  lore: string;
+  /** No one can take it from its bearer: the Holy Sword chooses who carries it. */
+  untakeable?: boolean;
+}
+
+/** An ability generated gear can roll: a trait, how it names the item, and where it fits. */
+export interface GearAbility {
+  /** Id into `GameConfig.traits`: the trait it gives (its `item` is set to the slot it is in). */
+  trait: string;
+  /** Which slots can roll it. */
+  kind: GearKind | 'any';
+  /** The least rarity an item needs to roll it. */
+  minRarity: Rarity;
+  /** How it names the item: 'Frostbitten …' or '… of Mending'. */
+  prefix?: string;
+  suffix?: string;
+  /** A weapon that rolls it deals this instead of its base's damage (armour: resists it). */
+  infuse?: DamageType;
+}
+
+/** Everything gear: shapes, abilities, uniques, and who drops what. */
+export interface GearConfig {
+  bases: Record<string, GearBase>;
+  abilities: GearAbility[];
+  uniques: Record<string, UniqueGear>;
+  /** Material names by power, 1–10: 'Rusted', 'Iron' … 'Starmetal'. */
+  materials: string[];
+  /** Proper names a legendary or mythical generated item may carry: 'Gravesong'. */
+  legendNames: string[];
+  /** The table for a foe with none of its own, from its power. */
+  lootFor: (power: number) => LootTable;
+  /** The colour of a damage type, for slices and chips. */
+  damageColors: Record<DamageType, string>;
+  /** How the Spoils wheel and its Keep/Take choice read. */
+  spoilsWheel: { title: string; nothing: string; nothingDescription: string };
 }
 
 /** A race definition. Options set it by id with `setRace`; characters store the id. */
@@ -109,13 +254,77 @@ export interface Personality {
   odds?: Record<string, Record<string, number>>;
 }
 
-/** An archetype (Warrior, Mage...). Options set it by id with `setArchetype`; characters store the id. */
+/**
+ * An archetype: not what a soul does but how fate treats them. A Wise soul spins every wheel
+ * twice, a Gambler bets every gain, a Brute slams the wheel to a stop. Options set it by id with
+ * `setArchetype`; characters store the id, and a frozen copy of its `rules` (`Character.rules`).
+ */
 export interface Archetype {
   id: string;
   name: string;
   description: string;
+  /** How rare it is to be born this way: the tier its slice on the Wheel of Archetypes shows. */
+  rarity: Rarity;
   /** How this archetype bends other wheels, exactly like `Race.odds`: odds[stepId][optionId]. */
   odds?: Record<string, Record<string, number>>;
+  /** What it changes about spinning itself. Read by engine/archetypes.ts. */
+  rules?: ArchetypeRules;
+}
+
+/**
+ * How an archetype bends the act of spinning. Plain data, so it can be frozen onto the character
+ * like a trait, and Combat Power never needs the config to read it. See engine/archetypes.ts.
+ */
+export interface ArchetypeRules {
+  /** Wise: every spun wheel is spun twice, side by side, and the soul keeps the result they prefer. */
+  rollTwice?: boolean;
+  /** Gambler: after every gain (stats, banked bonuses, gear) this wheel bets it, double or nothing. */
+  gamble?: string;
+  /** All-Rounder: the first stat wheel rolled sets every stat to the same value (each still gets its own bank). */
+  uniformStats?: boolean;
+  /** Assassin: the only stat a weapon is wielded with. */
+  weaponStat?: StatKey;
+  /** Assassin: armour is worn with the best of these, instead of Vitality alone. */
+  armorStats?: StatKey[];
+  /** Realist: the lowest and highest options are cut from every wheel. */
+  trimExtremes?: boolean;
+  /** Dreamer: every wheel gains a Nightmare below its worst option and a Miracle above its best. */
+  dreamTiers?: boolean;
+  /** Trickster: this wheel is spun before every battle; what it lands on bends the hero's power for that fight. */
+  beforeFight?: string;
+  /** Martial: wheels that would teach a spell become this wheel instead (by id). */
+  replaceSteps?: { steps: string[]; with: string };
+  /** Martial: stats held at a fixed value, whatever is rolled (Arcana 0). Their stat wheels are skipped. */
+  fixedStats?: Partial<StatBlock>;
+  /** Archmage: no weapon can be held. Their hand stays empty, and weapon traits give no power. */
+  noWeapon?: boolean;
+  /** Archmage: spells (traits that scale with Arcana) are worth this many times their power. */
+  spellMultiplier?: number;
+  /** Brute: a Smash button stops the spinning wheel dead, on whatever slice is under the pointer. */
+  smash?: boolean;
+  /** Broken: one to three options vanish from every wheel, more from bigger wheels. */
+  shatter?: boolean;
+  /** Hero: holy options are dealt this much more weight, and the wheel drags as it passes them. */
+  holyPull?: number;
+  /** Hero: the chance a death doesn't take. */
+  deathSave?: number;
+  /** Ancient: how many times in a life the soul may decide a roll instead of spinning it. */
+  decrees?: number;
+  /** Transcendent: the odds of each rarity are swapped with its mirror (common ↔ mythical, uncommon ↔ legendary...). */
+  mirrorRarity?: boolean;
+}
+
+/** What rides on a Gambler's coin: the gains of the roll just made. See engine/archetypes.ts. */
+export interface GambleStake {
+  /** Stat points gained. Doubled again, or taken back. */
+  stats?: Partial<StatBlock>;
+  /** Stats set outright by a stat wheel, at the value they were set to: doubled, or knocked to 1. */
+  set?: Partial<StatBlock>;
+  /** Banked bonus points gained. */
+  bonus?: Partial<StatBlock>;
+  /** Weapon and armour power gained (tempering, or better gear taken up). */
+  weapon?: number;
+  armor?: number;
 }
 
 /** One spin's outcome, kept on the character for history, replays and UI flair. */
@@ -134,6 +343,8 @@ export interface RollRecord {
   note?: string;
   /** The player picked this option (a choice wheel) rather than the wheel landing on it. */
   chosen?: boolean;
+  /** How an archetype decided this roll: smashed to a stop, decreed, or picked from two spins. */
+  how?: 'smash' | 'decree' | 'wise';
   /** Something from the hero's past came back on this roll: a hook paid off, a place returned to. */
   callback?: string;
   /** A meter filled and this wheel is what happened: 'The Hunger took over'. */
@@ -273,6 +484,16 @@ export interface Character {
   personality: string | null;
   /** Id into `GameConfig.archetypes`, or null before an option has set one. */
   archetype: string | null;
+  /** A frozen copy of the archetype's rules, set with it. Absent for souls without one (and older saves). */
+  rules?: ArchetypeRules;
+  /** Ancient: decrees left (`ArchetypeRules.decrees`). */
+  decrees?: number;
+  /** Gambler: the gains riding on the coin about to be spun, and where the road goes once it lands. */
+  stake?: { gains: GambleStake; then: string | null };
+  /** Trickster: what the last pre-battle wheel did to their power, for the fight about to happen. Spent by it. */
+  fightBoost?: number;
+  /** All-Rounder: the value the first stat wheel rolled, which every later stat wheel gives instead. */
+  uniformStat?: number;
   /** Earned on the wheels and set when creation ends, e.g. 'Warboss of the Great Horde'. Null if none. */
   title: string | null;
   stats: StatBlock;
@@ -287,10 +508,17 @@ export interface Character {
    * stat wheels, the Armory, treasure on the road.
    */
   luck: number;
-  /** 0 = bare hands. Each tier is worth `WEAPON_TIER_CP` Combat Power. */
-  weaponTier: number;
-  /** 0 = travelling clothes. Each tier is worth `ARMOR_TIER_CP` Combat Power, worn with Vitality. */
-  armorTier: number;
+  /** The weapon in hand, or null for bare hands. Each point of its power is worth `WEAPON_TIER_CP` Combat Power. */
+  weapon: GearItem | null;
+  /** The armour worn, or null for travelling clothes. Each point of its power is worth `ARMOR_TIER_CP`. */
+  armor: GearItem | null;
+  /**
+   * Gear offered while that slot was already filled, oldest first: the player keeps what they
+   * have or takes it (engine/gear.ts `chooseGear`). Absent when nothing waits.
+   */
+  gearOffers?: GearItem[];
+  /** How many items have been made for this character: seeds the next, so the same rolls make the same gear. */
+  gearMinted?: number;
   /**
    * Renown, earned on adventures: more for harder foes and grander wins. Its tier (see
    * `GameConfig.fame`) bends the crossroads toward riskier roads and unlocks the greatest
@@ -368,8 +596,8 @@ export type SingletonKey = string;
 export type ActiveSingletons = Record<SingletonKey, string>;
 
 export interface World {
-  /** Bump when the persisted shape changes; `loadWorld` upgrades v2–v8 and rejects anything else. */
-  schemaVersion: 9;
+  /** Bump when the persisted shape changes; `loadWorld` upgrades v2–v9 and rejects anything else. */
+  schemaVersion: 10;
   id: string;
   createdAt: number;
   activeSingletons: ActiveSingletons;
@@ -560,6 +788,14 @@ export interface WheelOption {
    * heroCP / (heroCP + foe.power). Like luck, it resizes the slice.
    */
   fight?: FightSide;
+  /** On a battle's Clash wheel: what this slice does to either side (engine/battle.ts). */
+  clash?: ClashSlice;
+  /**
+   * On the evade wheels (`AdventureConfig.evade`): 'fight' goes on to the fight the hero stood
+   * before, as if nothing happened; 'escape' skips it, and the road goes where the fight would
+   * have gone afterwards (`WheelStep.afterFight`). Either way `nextStepId` is not followed.
+   */
+  evade?: 'fight' | 'escape';
   /**
    * The tier this option is shown as. Defaults to 'common'. It never changes the odds;
    * `validateGameConfig` warns when a rarer option outweighs a more common one on the same wheel.
@@ -590,21 +826,31 @@ export interface WheelOption {
   setStats?: Partial<StatBlock>;
   /** Added to the character's luck. */
   luckDelta?: number;
-  /** Added to weapon tier, clamped to [0, MAX_WEAPON_TIER]. */
+  /**
+   * Better (or worse) steel. A gain is a weapon found, this much more powerful than the one in hand
+   * (`GearGrant` `{ better }`): random, and offered like any found item (Keep or Take). Only an
+   * `upgrade` (a smith, a forge) tempers the weapon in hand instead. A loss always wears the one in
+   * hand down (to 0, it breaks and is gone).
+   */
   weaponTierDelta?: number;
-  /** Added to armour tier, clamped to [0, MAX_ARMOR_TIER]. */
+  /** The same, for the armour they wear. */
   armorTierDelta?: number;
+  /** A real upgrade (a smith, a forge, a blade awakened): a tier gain tempers what they carry rather than finding something new. */
+  upgrade?: boolean;
   /**
    * How an omen hanging over the world (`world.omens`) bends this option: { plague: 2 }
    * doubles its weight while a plague lasts. Like threat, it changes the odds, not the slice.
    */
   omenScaling?: Record<string, number>;
   /**
-   * A weapon or armour of this tier, found or made: kept only if it beats what they carry.
+   * A weapon or armour, found or made (see `GearGrant`). An empty slot takes it at once; a filled
+   * one has it offered, and the player keeps what they have or takes it (`Character.gearOffers`).
    * Use it for a particular item (a rusty blade, a coat of mail); the deltas are for making
    * what they have better (a reforging, a theft).
    */
-  gear?: { weapon?: number; armor?: number };
+  gear?: { weapon?: GearGrant; armor?: GearGrant };
+  /** A fight win that takes nothing from the fallen (spared, befriended, recruited): no Spoils wheel follows. */
+  noSpoils?: boolean;
   /**
    * Fame this roll earns on an adventure (negative for disgrace; fame floors at 0). Without it,
    * `GameConfig.fame.earn` decides (more for harder foes and grander wins). Creation earns none.
@@ -635,6 +881,12 @@ export interface WheelOption {
   setPersonality?: string;
   /** Id into `GameConfig.archetypes`. */
   setArchetype?: string;
+  /** Holy: a Hero is dealt more of it, and the wheel drags as it passes (`ArchetypeRules.holyPull`). */
+  holy?: boolean;
+  /** On a Gambler's wheel: what happens to the stake (`Character.stake`). A jackpot triples it. */
+  gamble?: 'double' | 'triple' | 'lose';
+  /** On a Trickster's wheel: their power is multiplied by this for the coming fight (`Character.fightBoost`). */
+  fightBoost?: number;
   /**
    * Hones the trait the character gained most recently (a mastery wheel right after a power
    * wheel): its power is multiplied by `factor`, and it carries `rank`, e.g. 'Virtuoso'.
@@ -727,6 +979,8 @@ export interface WheelStep {
    * check is skipped for this wheel.
    */
   ladder?: boolean;
+  /** Its odds are exact by design (an even 50/50, a race's pull): common options aren't trimmed (odds.ts). */
+  exactOdds?: boolean;
   /**
    * On a ladder: the wheel to spin when banked bonuses push the roll past the best position
    * (a stat's Ascension). Creation then carries on where the ladder would have led.
@@ -747,6 +1001,12 @@ export interface WheelStep {
   repeats?: boolean;
   /** Drawn as a golden wheel: an ascension, a once-in-a-lifetime roll. Presentation only. */
   golden?: boolean;
+  /** No archetype reshapes this wheel: no trimming, no dream tiers, no shattering (an archetype's own wheels). */
+  fixed?: boolean;
+  /** On a fight: where the road goes once it is over, by default. A hero who evades it goes here. */
+  afterFight?: string | null | StepRoute;
+  /** A big fight: fought as a battle of several rounds (engine/battle.ts) before this wheel says how it ended. */
+  battle?: boolean;
   /** Rendered clockwise in this order. Order also defines `ResolvedSlice.index`. */
   options: WheelOption[];
 }
@@ -767,9 +1027,9 @@ export interface CastEffect {
   setRole?: CharacterRole;
   /** How their fate summary starts when they fall, before the hero's name. Default 'Brought down by'. */
   fallenBy?: string;
-  /** Their weapon / armour tier becomes this (0 once it has been taken from them). */
-  weaponTier?: number;
-  armorTier?: number;
+  /** Their weapon / armour becomes this (null once it has been taken from them). */
+  weapon?: GearItem | null;
+  armor?: GearItem | null;
   /** Trait ids they lose: items taken from them. */
   loseTraits?: string[];
   /** Snapshot traits they gain: a sworn bond. Already-owned ids are skipped. */
@@ -784,10 +1044,10 @@ export interface CastEffect {
 export interface CastSpoils {
   /** Snapshot traits the hero gains: an item taken from them, a technique they taught. Already-owned ids are skipped. */
   traits?: Trait[];
-  /** The hero's weapon tier becomes at least this: their blade, if it is better. */
-  weaponTier?: number;
-  /** The hero's armour tier becomes at least this. */
-  armorTier?: number;
+  /** Their weapon, offered to the hero (who keeps their own, or takes it). */
+  weapon?: GearItem;
+  /** Their armour, offered likewise. */
+  armor?: GearItem;
   /** Added to the hero's stats: what a teacher trained into them. */
   stats?: Partial<StatBlock>;
   /** What it does to the cast character, on top of the option's own `castEffect`. */
@@ -800,6 +1060,86 @@ export interface CastSpoils {
 export interface Foe {
   name: string;
   power: number;
+  /** What it drops: a Spoils wheel is drawn from this after a win. Default: `GearConfig.lootFor(power)`. */
+  loot?: LootTable;
+  /** Damage it is weak to: hits of these land harder (engine/matchup.ts). */
+  weak?: DamageType[];
+  /** Damage it shrugs off in part. */
+  resists?: DamageType[];
+  /** Damage that barely touches it. */
+  immune?: DamageType[];
+  /** What its ordinary blows deal: armour that turns it takes less. Default: bludgeoning. */
+  strikes?: DamageType;
+  /** Its signature blows, on a battle's wheel. The one it readies is announced a round ahead. */
+  moves?: FoeMove[];
+  /** A boss: fought as a battle of several rounds, with health bars, rather than one spin (engine/battle.ts). */
+  battle?: boolean;
+}
+
+/** A power as it is cast in a battle (`BattleConfig.spells`). */
+export interface BattleSpell {
+  /** hit: damage at the foe. heal: health back. drain: a hit that heals what it takes. ward: the foe's next wheel shrinks. */
+  kind: 'hit' | 'heal' | 'drain' | 'ward';
+  damage?: DamageType;
+  /** Battle units dealt (or healed). A ward deals none. */
+  power: number;
+  /** For the battle log: 'hurls a Fireball'. */
+  verb: string;
+}
+
+/** One slice of the Crit Cascade. */
+export interface CascadeSlice {
+  id: string;
+  label: string;
+  mult: number;
+  /** Doubles (its `mult`) and spins again, faster. */
+  chain?: boolean;
+  weight: number;
+  rarity: Rarity;
+  color: string;
+}
+
+/** Boss battles: what can be cast in them, the Crit Cascade, and how the Clash wheel's slices look. */
+export interface BattleConfig {
+  /** Keyed by trait id: the powers that can be cast. */
+  spells: Record<string, BattleSpell>;
+  cascade: CascadeSlice[];
+  /** How many cascade wheels can stack. */
+  cascadeDepth: number;
+  /** A foe's crit: one spin of these multipliers. */
+  foeCascade: { mult: number; weight: number }[];
+  /** Keyed by `ClashSlice.kind`. `{foe}`, `{move}` are filled in. */
+  look: Record<string, { label: string; description: string; icon: string; color: string }>;
+}
+
+/** A foe's signature blow in a battle: 'Fire Breath', fire. */
+export interface FoeMove {
+  name: string;
+  damage: DamageType;
+  /** What it readying it looks like: 'rears back, smoke curling from its jaws'. */
+  tell?: string;
+}
+
+/**
+ * What one slice of a battle's Clash wheel does (engine/battle.ts). Damage is in battle units:
+ * both sides have `BATTLE_POOL` of them at full health.
+ */
+export interface ClashSlice {
+  kind: 'strike' | 'glance' | 'crit' | 'spell' | 'execute' | 'leech' | 'stand' | 'riposte' | 'block' | 'foe_strike' | 'foe_move' | 'foe_crit' | 'thorns';
+  /** Damage dealt to the foe. */
+  toFoe?: number;
+  /** Damage dealt to the hero. */
+  toHero?: number;
+  /** Health the hero gets back. */
+  heal?: number;
+  /** The foe's side of the next wheel shrinks. */
+  ward?: boolean;
+  /** The kind of damage that lands. */
+  damage?: DamageType;
+  /** How the damage met its target: weak, resisted, immune, or turned by armour. */
+  matchup?: 'weak' | 'resisted' | 'immune' | 'turned';
+  /** The spell cast, for a spell slice. */
+  spellId?: string;
 }
 
 export interface GameConfig {
@@ -836,6 +1176,10 @@ export interface GameConfig {
   hooks?: Record<string, HookDef>;
   /** What becoming a race means, for the reveal: new things they can do, doors that close. Keyed by race id. */
   identities?: Record<string, IdentityKit>;
+  /** Weapons, armour and loot. Without it, gear grants make plain items and fights drop nothing. */
+  gear?: GearConfig;
+  /** Boss battles. Without it, every fight is a single spin. */
+  battle?: BattleConfig;
 }
 
 /** A pressure that builds: wounds, notoriety, a vampire's hunger. */
@@ -912,7 +1256,19 @@ export interface AdventureConfig {
    * adventure is a single errand. A full meter still has the last word before it.
    */
   roadHome?: { stepId: string; minSpins: number };
+  /**
+   * Slipping past a fight (Shadowstep): before any wheel with a foe, a hero with one of
+   * `traits` is sent to `stepId` first, a choice wheel. Its options, and the wheels they lead
+   * to, end with an option marked `evade`: on to the fight, or past it. `{foe}` and `{power}`
+   * in their words name what stands in the way.
+   */
+  evade?: { traits: string[]; stepId: string };
+  /** Boss battles: how spells are cast. 'auto': they are slices on the wheel. 'choose': the player casts them between spins. */
+  battleSpells?: SpellMode;
 }
+
+/** How a battle's spells are cast (engine/battle.ts). One of these is to be retired after playtesting. */
+export type SpellMode = 'auto' | 'choose';
 
 /** The look of the "who is it?" wheel. Each candidate gets an equal slice. */
 export interface CastWheelConfig {

@@ -3,7 +3,9 @@
  * turn, the cast pools the road draws recurring characters from, and the fight builder.
  */
 import { calculatePowerRating } from '../engine/power';
+import { armorPower, weaponPower } from '../engine/gear';
 import type { CastSpec, Character, Foe, Personality, Rarity, StatBlock, StepRoute, WheelOption, WheelStep, World } from '../engine/types';
+import { GEAR_DEATH_CHEATS, LOOT_TABLES } from './gear';
 
 /**
  * The one-of-a-kind roles used by this config. The engine accepts any string;
@@ -62,12 +64,12 @@ export const BEST_FOUND_GEAR = 5;
  * if better.
  */
 export function gearItem(kind: 'weapon' | 'armor', tier: number, lock = true): Pick<WheelOption, 'gear' | 'condition' | 'lockedReason'> {
-  const carried = (char: Character) => (kind === 'weapon' ? char.weaponTier : char.armorTier);
+  const carried = (char: Character) => (kind === 'weapon' ? weaponPower(char) : armorPower(char));
   return {
     gear: { [kind]: tier },
     ...(lock && {
       condition: (_world: World, char: Character) => carried(char) < tier,
-      lockedReason: (_world: World, char: Character) => `Their ${kind === 'weapon' ? 'weapon' : 'armour'} is already tier ${carried(char)}`,
+      lockedReason: (_world: World, char: Character) => `Their ${kind === 'weapon' ? 'weapon' : 'armour'} is already power ${carried(char)}`,
     }),
   };
 }
@@ -120,43 +122,156 @@ export const isUncorruptable = (char: Character) => hasTrait(char, 'uncorruptabl
  * challenges, open only to the Famous, are tuned well past it.
  */
 export const FOES = {
-  goblins: { name: 'Goblin Horde', power: 100 },
-  bandits: { name: 'Bandit Gang', power: 120 },
-  spiders: { name: 'Broodmother', power: 190 },
-  troll: { name: 'Bridge Troll', power: 300 },
-  guardian: { name: 'Stone Guardian', power: 350 },
-  wights: { name: 'Barrow Wights', power: 420 },
-  wyvern: { name: 'Wyvern', power: 560 },
-  dragon: { name: 'Elder Dragon', power: 920 },
+  goblins: {
+    name: 'Goblin Horde', power: 100, loot: LOOT_TABLES.goblins,
+    weak: ['fire', 'bludgeoning'], strikes: 'piercing',
+    moves: [{ name: 'The Swarm', damage: 'slashing', tell: 'start chanting, and there are suddenly a great many more of them' }],
+  },
+  bandits: {
+    name: 'Bandit Gang', power: 120, loot: LOOT_TABLES.bandits,
+    strikes: 'slashing',
+    moves: [{ name: 'Ambush Volley', damage: 'piercing', tell: 'melt back into the trees, bows coming up' }],
+  },
+  spiders: {
+    name: 'Broodmother', power: 190, loot: LOOT_TABLES.spiders,
+    weak: ['fire'], immune: ['poison'], strikes: 'poison',
+    moves: [{ name: 'Web and Fang', damage: 'poison', tell: 'goes very still, fangs glistening' }],
+  },
+  troll: {
+    name: 'Bridge Troll', power: 300, loot: LOOT_TABLES.troll,
+    weak: ['fire'], resists: ['bludgeoning'], strikes: 'bludgeoning',
+    moves: [{ name: 'Club Smash', damage: 'bludgeoning', tell: 'lifts its club over its head with both hands' }],
+  },
+  guardian: {
+    name: 'Stone Guardian', power: 350, loot: LOOT_TABLES.guardian,
+    weak: ['bludgeoning', 'lightning'], resists: ['slashing', 'piercing'], immune: ['poison'], strikes: 'bludgeoning',
+    moves: [{ name: 'Stone Fist', damage: 'bludgeoning', tell: 'grinds its fist back, runes flaring' }],
+  },
+  wights: {
+    name: 'Barrow Wights', power: 420, loot: LOOT_TABLES.wights,
+    weak: ['holy', 'fire'], resists: ['frost', 'shadow'], immune: ['poison'], strikes: 'shadow',
+    moves: [{ name: 'Grave Chill', damage: 'frost', tell: 'breathe out, and the air turns to frost' }],
+  },
+  wyvern: {
+    name: 'Wyvern', power: 560, loot: LOOT_TABLES.wyvern, battle: true,
+    weak: ['piercing', 'frost'], resists: ['poison'], strikes: 'piercing',
+    moves: [
+      { name: 'Venom Tail', damage: 'poison', tell: 'arches its tail high, the barb dripping' },
+      { name: 'Diving Talons', damage: 'piercing', tell: 'climbs, and climbs, and folds its wings' },
+    ],
+  },
+  dragon: {
+    name: 'Elder Dragon', power: 920, loot: LOOT_TABLES.dragon, battle: true,
+    weak: ['frost'], resists: ['slashing', 'piercing'], immune: ['fire'], strikes: 'slashing',
+    moves: [
+      { name: 'Fire Breath', damage: 'fire', tell: 'rears back, smoke curling from its jaws' },
+      { name: 'Tail Sweep', damage: 'bludgeoning', tell: 'turns, and the tail comes round like a wall' },
+    ],
+  },
   // The crossroads (activities.ts)
-  beast: { name: 'Man-Eater', power: 200 },
-  duelist: { name: 'Duelist', power: 240 },
-  rogueMage: { name: 'Rogue Mage', power: 330 },
-  tournament: { name: 'Tournament Champion', power: 390 },
-  undefeated: { name: 'Undefeated Champion', power: 580 },
-  war: { name: 'The Enemy Host', power: 650 },
+  beast: {
+    name: 'Man-Eater', power: 200, loot: LOOT_TABLES.beast,
+    weak: ['piercing', 'fire'], strikes: 'slashing',
+    moves: [{ name: 'Maul', damage: 'slashing', tell: 'drops low, haunches bunched' }],
+  },
+  duelist: {
+    name: 'Duelist', power: 240, loot: LOOT_TABLES.duelist,
+    weak: ['bludgeoning'], strikes: 'piercing',
+    moves: [{ name: 'Riposte', damage: 'piercing', tell: 'smiles, and lowers their guard. On purpose' }],
+  },
+  rogueMage: {
+    name: 'Rogue Mage', power: 330, loot: LOOT_TABLES.rogueMage,
+    weak: ['piercing', 'bludgeoning'], resists: ['arcane'], strikes: 'arcane',
+    moves: [
+      { name: 'Arcane Bolt', damage: 'arcane', tell: 'traces a sigil in the air, and it stays there' },
+      { name: 'Fire Burst', damage: 'fire', tell: 'cups their hands, and the light between them turns orange' },
+    ],
+  },
+  tournament: {
+    name: 'Tournament Champion', power: 390, loot: LOOT_TABLES.tournament,
+    weak: ['bludgeoning'], resists: ['slashing', 'piercing'], strikes: 'bludgeoning',
+    moves: [{ name: 'Lance Charge', damage: 'piercing', tell: 'wheels their horse, and lowers the lance' }],
+  },
+  undefeated: {
+    name: 'Undefeated Champion', power: 580, loot: LOOT_TABLES.undefeated, battle: true,
+    resists: ['slashing'], strikes: 'slashing',
+    moves: [
+      { name: 'The Perfect Cut', damage: 'slashing', tell: 'settles into a stance nobody has ever seen twice' },
+      { name: 'Shield Bash', damage: 'bludgeoning', tell: 'squares up behind the shield' },
+    ],
+  },
+  war: {
+    name: 'The Enemy Host', power: 650, loot: LOOT_TABLES.war, battle: true,
+    weak: ['fire', 'lightning'], resists: ['piercing'], strikes: 'piercing',
+    moves: [
+      { name: 'Arrow Storm', damage: 'piercing', tell: 'a thousand bows come up at once' },
+      { name: 'Cavalry Charge', damage: 'bludgeoning', tell: 'the ground starts to shake' },
+    ],
+  },
   // Legendary challenges, for the Famous (legacy.ts)
-  usurper: { name: 'The Usurper and Their Guard', power: 1100 },
-  greatWar: { name: 'The Endless Host', power: 1300 },
-  breachHorror: { name: 'The Thing From the Breach', power: 1400 },
-  demonLord: { name: 'The Demon Lord', power: 1500 },
-  wyrm: { name: 'The Primordial Wyrm', power: 1800 },
-  titan: { name: 'The Waking Titan', power: 2400 },
+  usurper: {
+    name: 'The Usurper and Their Guard', power: 1100, loot: LOOT_TABLES.usurper, battle: true,
+    weak: ['holy'], resists: ['slashing'], strikes: 'slashing',
+    moves: [
+      { name: 'The Guard Closes', damage: 'piercing', tell: 'raises a hand, and the spears level' },
+      { name: 'Poisoned Crown', damage: 'poison', tell: 'smiles, and someone in the crowd moves' },
+    ],
+  },
+  greatWar: {
+    name: 'The Endless Host', power: 1300, loot: LOOT_TABLES.greatWar, battle: true,
+    weak: ['fire', 'lightning'], resists: ['piercing', 'slashing'], strikes: 'piercing',
+    moves: [
+      { name: 'Arrow Storm', damage: 'piercing', tell: 'the sky goes dark with fletching' },
+      { name: 'Siege Fire', damage: 'fire', tell: 'the trebuchets creak back' },
+    ],
+  },
+  breachHorror: {
+    name: 'The Thing From the Breach', power: 1400, loot: LOOT_TABLES.breachHorror, battle: true,
+    weak: ['holy', 'lightning'], resists: ['arcane', 'shadow'], immune: ['poison'], strikes: 'shadow',
+    moves: [
+      { name: 'Reality Tear', damage: 'arcane', tell: 'opens, in a direction that should not exist' },
+      { name: 'Grasping Dark', damage: 'shadow', tell: 'every shadow in the room leans toward them' },
+    ],
+  },
+  demonLord: {
+    name: 'The Demon Lord', power: 1500, loot: LOOT_TABLES.demonLord, battle: true,
+    weak: ['holy'], resists: ['shadow'], immune: ['fire', 'poison'], strikes: 'fire',
+    moves: [
+      { name: 'Hellfire', damage: 'fire', tell: 'spreads its wings, and the floor starts to glow' },
+      { name: 'Soul Rend', damage: 'shadow', tell: 'speaks their true name, slowly' },
+    ],
+  },
+  wyrm: {
+    name: 'The Primordial Wyrm', power: 1800, loot: LOOT_TABLES.wyrm, battle: true,
+    weak: ['lightning'], resists: ['fire', 'frost', 'slashing'], strikes: 'bludgeoning',
+    moves: [
+      { name: 'Primordial Breath', damage: 'fire', tell: 'draws in a breath that pulls the clouds down' },
+      { name: 'The Coils', damage: 'bludgeoning', tell: 'the mountain itself begins to move' },
+    ],
+  },
+  titan: {
+    name: 'The Waking Titan', power: 2400, loot: LOOT_TABLES.titan, battle: true,
+    weak: ['lightning'], resists: ['bludgeoning', 'slashing', 'piercing'], strikes: 'bludgeoning',
+    moves: [
+      { name: 'Earthshatter', damage: 'bludgeoning', tell: 'raises a foot the size of a keep' },
+      { name: 'Sky Fall', damage: 'lightning', tell: 'reaches up, and takes hold of the storm' },
+    ],
+  },
 } satisfies Record<string, Foe>;
 
 /** Traits that cheat death, and what they say about it. A soul with one can't roll a fatal slice. */
 const DEATH_CHEATS: Record<string, string> = {
-  iron_will: 'Iron Will: they get back up. Every time.',
+  ...GEAR_DEATH_CHEATS,
   phylactery_spark: 'Phylactery: their soul is kept elsewhere. They reform.',
   lich_phylactery: 'Phylactery: their soul is kept elsewhere. They reform.',
   resurrection: 'Resurrection: death is a door they open from the other side.',
   cheated_death: 'Death owes them one: it comes, and goes away again.',
 };
-/** True for anyone who can die: no Iron Will, no phylactery, no Resurrection. */
+/** True for anyone who can die: no phylactery, no Resurrection. (Iron Will only gets them up once a fight, engine/battle.ts.) */
 export const IRON_WILL_SAVES = (_world: World, char: Character) => !char.traits.some((t) => t.id in DEATH_CHEATS);
 /** Why a fatal slice is boarded up for this soul. */
 export const deathCheatReason = (_world: World, char: Character) =>
-  DEATH_CHEATS[char.traits.find((t) => t.id in DEATH_CHEATS)?.id ?? 'iron_will']!;
+  DEATH_CHEATS[char.traits.find((t) => t.id in DEATH_CHEATS)?.id ?? 'cheated_death']!;
 
 /**
  * What one fight outcome does, and how it looks. Weights and the fight side are filled in by
@@ -165,6 +280,9 @@ export const deathCheatReason = (_world: World, char: Character) =>
  */
 export type Outcome = Omit<WheelOption, 'id' | 'baseWeight' | 'nextStepId' | 'fight'> & { next?: string | StepRoute };
 type Next = WheelOption['nextStepId'];
+
+/** A foe's damage profile, without its name and power: for foes worked out on the spot. */
+export type FoeProfile = Pick<Foe, 'weak' | 'resists' | 'immune' | 'strikes' | 'moves'>;
 
 export interface FightSpec {
   id: string;
@@ -176,6 +294,10 @@ export interface FightSpec {
   cast?: CastSpec;
   /** A foe worked out from the hero instead (a rival, an ambush that grows with threat). `foe` is the fallback. */
   foeOf?: (char: Character) => Foe;
+  /** A boss fight: a battle of several rounds, with health bars, before this wheel says how it ended. */
+  battle?: boolean;
+  /** What the foe (a worked-out one included) is weak to, resists and strikes with. */
+  profile?: FoeProfile;
   /** Where every survivable outcome leads unless it says otherwise (a quest goes on). Default: the road ends. */
   then?: Next;
   /** The share of defeats that are fatal, 0.15–0.85. */
@@ -209,11 +331,26 @@ const LEGEND_WEIGHT = 6;
 const KIT_WINS: (Outcome & { id: string; requiresTrait: string[] })[] = [
   { id: 'kit_drain', label: 'Drained Them Dry', description: 'They won the way a vampire wins: slowly, and up close. The Hunger eases, the wounds close.', requiresTrait: ['vampiric'], meters: { hunger: -3, wounds: -1 }, statModifiers: { vitality: 1 }, color: '#8a1c2e', icon: 'Droplets' },
   { id: 'kit_beast', label: 'The Beast Took Over', description: 'Fur, teeth, and a fight that ended very fast. Someone saw.', requiresTrait: ['moonstruck'], meters: { moon: -1, notoriety: 1 }, statModifiers: { might: 1 }, color: '#5a6478', icon: 'MoonStar' },
+  { id: 'kit_blademaster', label: 'Steel Answered', description: 'Their blade was already where the enemy’s would be. It was over in three moves.', requiresTrait: ['blademaster'], statModifiers: { agility: 1 }, color: '#e11d48', icon: 'Swords' },
   { id: 'kit_blade', label: 'The Blade Drank', description: 'The whispering blade moved their arm for them. It is quiet now, and pleased.', requiresTrait: ['sentient_blade'], removeTags: ['hook:blade_hungers'], callback: 'The whispering blade was fed', statModifiers: { might: 1 }, color: '#6a3a8a', icon: 'Sword' },
 ];
 
-/** Glory comes a little more often to the sharp: +3% per point of Intellect above Average. */
-const GLORY_SCALING: Partial<StatBlock> = { intellect: 0.03 };
+/**
+ * Ways to win that gear brings (its abilities, config/gear/abilities.ts): a blade that drinks,
+ * armour with thorns. Dealt only to those whose gear gives one.
+ */
+const GEAR_WINS: (Outcome & { id: string; requiresTrait: string[] })[] = [
+  { id: 'gear_win_leech', label: 'Drank Their Strength', description: 'The blade drank as it cut. Their own wounds closed.', requiresTrait: ['gear_vampiric'], meters: { wounds: -1 }, statModifiers: { vitality: 1 }, color: '#9b1c3a', icon: 'Droplets' },
+  { id: 'gear_win_slaying', label: 'One Clean Stroke', description: 'The edge found the one place that mattered. It was over before it started.', requiresTrait: ['gear_slaying'], statModifiers: { might: 1 }, color: '#c2410c', icon: 'Sword' },
+  { id: 'gear_win_disarm', label: 'Disarmed Them', description: 'A flick, a twist, and their weapon was across the room.', requiresTrait: ['gear_duelist'], statModifiers: { agility: 1 }, color: '#a8a29e', icon: 'Swords' },
+  { id: 'gear_win_mending', label: 'Wounds Closed', description: 'The armour knit itself back together, and them with it.', requiresTrait: ['gear_mending'], meters: { wounds: -2 }, color: '#4d7c5a', icon: 'HeartPulse' },
+  { id: 'gear_win_thorns', label: 'The Thorns Did the Rest', description: 'Every blow they landed cost them. Soon they stopped landing.', requiresTrait: ['gear_thorns'], statModifiers: { vitality: 1 }, color: '#5b6b3a', icon: 'ShieldHalf' },
+];
+/** A gear win's weight, beside Victory's 85: a kit win's. */
+const GEAR_WIN_WEIGHT = 15;
+
+/** Glory comes more often to the sharp: +4% per point of Intellect above Average. */
+const GLORY_SCALING: Partial<StatBlock> = { intellect: 0.04 };
 
 /** Every stat's scaling times `by`. */
 function scaled(scaling: Partial<StatBlock>, by: number): Partial<StatBlock> {
@@ -230,8 +367,12 @@ function scaled(scaling: Partial<StatBlock>, by: number): Partial<StatBlock> {
  * and whispering blades bring wins of their own (KIT_WINS).
  */
 export function fightWheel(spec: FightSpec): WheelStep {
-  const { id, title, subtitle, foe, cast, foeOf, then = null, deadliness, victory, glory, retreat, slain, turncoat, traitWins = [], legend } = spec;
+  const { id, title, subtitle, cast, then = null, deadliness, victory, glory, retreat, slain, turncoat, traitWins = [], legend, battle, profile } = spec;
+  const foe: Foe = profile ? { ...profile, ...spec.foe } : spec.foe;
+  const foeOf = profile && spec.foeOf ? (c: Character): Foe => ({ ...profile, ...spec.foeOf!(c) }) : spec.foeOf;
   const out = <T extends Outcome>(o: T) => outcome(o, then);
+  // A won fight's gear comes from its Spoils wheel now: wins no longer temper what they carry as well.
+  const won = <T extends Outcome>(o: T) => out(spoilsInstead(o));
   // The hype slice's weight comes out of Victory's, and so does its share of stat scaling.
   const bonus = legend ? LEGEND_WEIGHT : 0;
   const gloryScaling = { ...GLORY_SCALING, ...glory.statScaling };
@@ -248,13 +389,16 @@ export function fightWheel(spec: FightSpec): WheelStep {
     foe,
     ...(cast && { cast }),
     ...(foeOf && { foeOf }),
+    ...((battle || foe.battle) && { battle: true }),
+    afterFight: then,
     options: [
       // Victory gives up exactly what Glory (and the hype slice) gain, so the chance to win stays CP against CP.
-      { color: '#3f8a5a', icon: 'Trophy', rarity: 'common', ...out(victory), statScaling: scaled(gloryScaling, -(15 + bonus) / (85 - bonus)), id: 'victory', baseWeight: 85 - bonus, fight: 'win' },
-      { color: '#c9a24c', icon: 'Crown', ...out(glory), statScaling: gloryScaling, id: 'glory', baseWeight: 15, fight: 'win' },
-      ...(legend ? [{ color: '#ffb84d', icon: 'Star', ...out(legend), statScaling: gloryScaling, id: 'legend', baseWeight: LEGEND_WEIGHT, fight: 'win' } satisfies WheelOption] : []),
-      ...traitWins.map((win): WheelOption => ({ color: '#5aa9a0', icon: 'Sparkles', rarity: 'rare', ...out(win), baseWeight: 15, fight: 'win' })),
+      { color: '#3f8a5a', icon: 'Trophy', rarity: 'common', ...won(victory), statScaling: scaled(gloryScaling, -(15 + bonus) / (85 - bonus)), id: 'victory', baseWeight: 85 - bonus, fight: 'win' },
+      { color: '#c9a24c', icon: 'Crown', ...won(glory), statScaling: gloryScaling, id: 'glory', baseWeight: 15, fight: 'win' },
+      ...(legend ? [{ color: '#ffb84d', icon: 'Star', ...won(legend), statScaling: gloryScaling, id: 'legend', baseWeight: LEGEND_WEIGHT, fight: 'win' } satisfies WheelOption] : []),
+      ...traitWins.map((win): WheelOption => ({ color: '#5aa9a0', icon: 'Sparkles', rarity: 'rare', ...won(win), baseWeight: 15, fight: 'win' })),
       ...KIT_WINS.filter((kit) => !traitWins.some((w) => w.id === kit.id)).map((win): WheelOption => ({ rarity: 'rare', ...out(win), baseWeight: 15, fight: 'win' })),
+      ...GEAR_WINS.map((win): WheelOption => ({ rarity: 'rare', ...out(win), baseWeight: GEAR_WIN_WEIGHT, fight: 'win' })),
       {
         color: '#6b5a4a',
         icon: 'HeartCrack',
@@ -291,6 +435,17 @@ export function turncoatOption({ share: _share, ...rest }: NonNullable<FightSpec
 }
 
 /** An outcome as option fields: `next` becomes where it leads (without one, `then`: by default the road ends). */
+/** A win without the gear tempering it used to bring (a loss still costs them). A win that takes nothing keeps it. */
+function spoilsInstead<T extends Outcome>(o: T): T {
+  if (o.noSpoils) return o;
+  const { weaponTierDelta, armorTierDelta, ...rest } = o;
+  return {
+    ...rest,
+    ...(weaponTierDelta !== undefined && weaponTierDelta < 0 && { weaponTierDelta }),
+    ...(armorTierDelta !== undefined && armorTierDelta < 0 && { armorTierDelta }),
+  } as T;
+}
+
 function outcome<T extends Outcome>({ next, ...rest }: T, then: Next): Omit<T, 'next'> & { nextStepId: Next } {
   return { ...rest, nextStepId: next ?? then };
 }

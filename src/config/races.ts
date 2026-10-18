@@ -22,7 +22,6 @@ export { BLOOD_TAG, racesOf } from '../engine/character';
 // ─── The races ──────────────────────────────────────────────────────────────
 
 const ELF_ODDS = {
-  archetype: { ranger: 2, mage: 1.6, druid: 1.6, barbarian: 0.4 },
   fate: { blessed: 1.3 },
   personality: { curious: 1.6, cautious: 1.4, cruel: 0.6 },
   talents: { arcane_savant: 1.8, shadowstep: 1.4, unbreakable: 0.6 },
@@ -36,7 +35,7 @@ export const RACES = {
     name: 'Human',
     description: 'Short lives, long ambitions. Good at everything, best at nothing.',
     names: NAMES.human,
-    odds: { archetype: { paladin: 1.2, bard: 1.2 }, personality: { brave: 1.2, cautious: 1.2 }, talents: { blademaster: 1.2 } },
+    odds: { personality: { brave: 1.2, cautious: 1.2 }, talents: { blademaster: 1.2 } },
   },
   elf: { id: 'elf', name: 'Elf', description: 'Quick, keen, and older than they look.', names: NAMES.elf, odds: ELF_ODDS },
   wood_elf: { id: 'wood_elf', name: 'Wood Elf', family: 'elf', description: 'Bow, leaf and silence.' },
@@ -45,7 +44,7 @@ export const RACES = {
     name: 'High Elf',
     family: 'elf',
     description: 'Towers of silver and very long memories.',
-    odds: { archetype: { mage: 2.4 }, talents: { arcane_savant: 2.4, archmage: 2 }, personality: { ambitious: 1.6, kind: 0.8 } },
+    odds: { talents: { arcane_savant: 2.4, archmage: 2 }, personality: { ambitious: 1.6, kind: 0.8 } },
   },
   dark_elf: {
     id: 'dark_elf',
@@ -53,7 +52,6 @@ export const RACES = {
     family: 'elf',
     description: 'Raised under the world, where trust is a weakness.',
     odds: {
-      archetype: { rogue: 2, warlock: 2.2, necromancer: 1.6, cleric: 0.5 },
       fate: { cursed: 1.6, blessed: 0.7 },
       personality: { cruel: 1.6, ambitious: 1.8, kind: 0.6 },
     },
@@ -66,7 +64,6 @@ export const RACES = {
     description: 'Stone-stubborn and forge-proud.',
     names: NAMES.dwarf,
     odds: {
-      archetype: { warrior: 1.6, cleric: 1.4, artificer: 2.5, bard: 0.6, druid: 0.4 },
       personality: { honorable: 2, greedy: 1.6, reckless: 0.6 },
       talents: { unbreakable: 1.6, runesmith: 1.5 },
       armory: { war_axe: 2.5, warhammer: 2, hunters_longbow: 0.5 },
@@ -78,7 +75,6 @@ export const RACES = {
     description: 'Strength first. Questions later, possibly never.',
     names: NAMES.orc,
     odds: {
-      archetype: { barbarian: 2.8, warrior: 1.6, mage: 0.4, bard: 0.5, cleric: 0.6 },
       fate: { cursed: 1.4, blessed: 0.7 },
       personality: { reckless: 1.8, cruel: 1.6, brave: 1.4, cautious: 0.5, curious: 0.6 },
       talents: { blademaster: 1.6, unbreakable: 1.5, arcane_savant: 0.4 },
@@ -91,7 +87,6 @@ export const RACES = {
     description: 'Small, quiet, and somehow always where the luck is.',
     names: NAMES.halfling,
     odds: {
-      archetype: { rogue: 2.2, bard: 1.8, barbarian: 0.3 },
       fate: { blessed: 1.3, demon_lord: 0.5 },
       personality: { kind: 1.8, curious: 1.5, cruel: 0.3, ambitious: 0.5 },
       talents: { shadowstep: 1.8, blademaster: 0.6 },
@@ -104,7 +99,6 @@ export const RACES = {
     description: 'Scales, smoke, and a grudge older than kingdoms.',
     names: NAMES.dragonborn,
     odds: {
-      archetype: { paladin: 2, warrior: 1.4, monk: 0.6 },
       personality: { brave: 1.4, ambitious: 1.8, honorable: 1.4 },
       talents: { blademaster: 1.3 },
       // Every dragon in the world wants a dragonborn's hoard.
@@ -118,7 +112,6 @@ export const RACES = {
     description: 'Born of light, and sent down here on purpose.',
     names: NAMES.celestial,
     odds: {
-      archetype: { cleric: 2.5, paladin: 2.5, warlock: 0.05, necromancer: 0.05, rogue: 0.6 },
       fate: { blessed: 2.5, cursed: 0.2, demon_lord: 0.15 },
       personality: { kind: 1.8, honorable: 2, cruel: 0.2 },
       talents: { arcane_savant: 1.6 },
@@ -131,7 +124,6 @@ export const RACES = {
     description: 'Small, sharp, and never as alone as they look.',
     names: NAMES.goblin,
     odds: {
-      archetype: { rogue: 2.2, artificer: 1.4, paladin: 0.2, cleric: 0.4 },
       fate: { cursed: 1.5, blessed: 0.6 },
       personality: { greedy: 2, reckless: 1.6, cruel: 1.4, honorable: 0.3 },
       talents: { shadowstep: 1.8 },
@@ -145,7 +137,6 @@ export const RACES = {
     description: 'Trap-maker, tunnel-digger, dragon-worshipper.',
     names: NAMES.kobold,
     odds: {
-      archetype: { artificer: 2, rogue: 1.6, warlock: 1.4 },
       fate: { cursed: 1.2 },
       personality: { cautious: 1.8, greedy: 1.4 },
       talents: { shadowstep: 1.4 },
@@ -157,7 +148,6 @@ export const RACES = {
     description: 'Cold blood, patient eyes, no small talk.',
     names: NAMES.lizardfolk,
     odds: {
-      archetype: { ranger: 1.8, druid: 1.8, barbarian: 1.4, bard: 0.4 },
       personality: { cautious: 1.5, kind: 0.7 },
       talents: { unbreakable: 1.6 },
       armory: { hunters_longbow: 1.4 },
@@ -169,7 +159,6 @@ export const RACES = {
     description: 'Bones that forgot how to lie still.',
     names: NAMES.skeleton,
     odds: {
-      archetype: { warrior: 2, necromancer: 1.8, cleric: 0.1, paladin: 0.1, bard: 0.3 },
       fate: { cursed: 2, blessed: 0.2, demon_lord: 1.5 },
       personality: { cruel: 1.6, kind: 0.4 },
       talents: { unbreakable: 1.5 },
@@ -181,7 +170,6 @@ export const RACES = {
     description: 'A skeleton that learned the one spell that matters.',
     names: NAMES.lich,
     odds: {
-      archetype: { necromancer: 5, mage: 3, warrior: 0.2, barbarian: 0.1 },
       fate: { cursed: 2, blessed: 0.2, demon_lord: 2.5 },
       personality: { ambitious: 2.2, cruel: 1.6, kind: 0.3 },
       talents: { arcane_savant: 2.5, archmage: 2.5 },
@@ -194,7 +182,6 @@ export const RACES = {
     description: 'Very large, very hungry, surprisingly sentimental.',
     names: NAMES.ogre,
     odds: {
-      archetype: { barbarian: 3, warrior: 1.6, mage: 0.5, rogue: 0.3 },
       fate: { demon_lord: 1.3 },
       personality: { greedy: 1.6, reckless: 1.4, curious: 0.5 },
       talents: { unbreakable: 1.6, arcane_savant: 0.3 },
@@ -207,7 +194,6 @@ export const RACES = {
     description: 'Never lost in any maze, never far from a fight.',
     names: NAMES.minotaur,
     odds: {
-      archetype: { barbarian: 2.5, warrior: 2, rogue: 0.4 },
       personality: { brave: 1.6, reckless: 1.8, cautious: 0.5 },
       talents: { blademaster: 1.6 },
       armory: { war_axe: 2.5 },
@@ -219,7 +205,6 @@ export const RACES = {
     description: 'Two shapes, one appetite.',
     names: NAMES.werewolf,
     odds: {
-      archetype: { barbarian: 2, ranger: 1.6, druid: 1.6 },
       fate: { cursed: 1.8 },
       personality: { reckless: 1.6, cruel: 1.3 },
       talents: { shadowstep: 1.3, unbreakable: 1.3 },
@@ -231,7 +216,6 @@ export const RACES = {
     description: 'Old, elegant, and always thirsty.',
     names: NAMES.vampire,
     odds: {
-      archetype: { rogue: 1.8, warlock: 2, necromancer: 1.6, cleric: 0.1, paladin: 0.1 },
       fate: { cursed: 2.2, blessed: 0.1, demon_lord: 2 },
       personality: { cruel: 1.8, ambitious: 2, kind: 0.4 },
       talents: { arcane_savant: 1.5, shadowstep: 1.5 },
@@ -243,7 +227,6 @@ export const RACES = {
     description: 'Small hands, big ideas, frequent explosions.',
     names: NAMES.gnome,
     odds: {
-      archetype: { artificer: 3, mage: 1.8, bard: 1.4, barbarian: 0.2, warrior: 0.5 },
       personality: { curious: 2.2, cautious: 1.4, cruel: 0.4 },
       talents: { arcane_savant: 1.6 },
       armory: { runed_staff: 1.6, war_axe: 0.3 },
@@ -255,7 +238,6 @@ export const RACES = {
     description: 'Built, not born. Gears, runes, or stone where a heart should be.',
     names: NAMES.construct,
     odds: {
-      archetype: { warrior: 2.2, artificer: 1.6, monk: 1.2, bard: 0.3, druid: 0.2 },
       fate: { blessed: 0.6, cursed: 0.8 },
       personality: { honorable: 1.8, cautious: 1.6, kind: 0.6, curious: 0.6 },
       talents: { unbreakable: 2.5 },
@@ -268,7 +250,6 @@ export const RACES = {
     description: 'Worshipped before they could walk. Every domain belongs to one god alone.',
     names: NAMES.god,
     odds: {
-      archetype: { cleric: 2, paladin: 1.8, mage: 1.6, druid: 1.4 },
       fate: { blessed: 3, cursed: 0.15, demon_lord: 0.4 },
       personality: { ambitious: 1.8, honorable: 1.5, cruel: 0.6 },
       talents: { archmage: 2, holy_sword: 1.5 },
@@ -281,7 +262,6 @@ export const RACES = {
     description: 'A child of the Abyss walking the upper world.',
     names: NAMES.demon,
     odds: {
-      archetype: { warlock: 3, necromancer: 2.2, barbarian: 1.4, cleric: 0.05, paladin: 0.05 },
       fate: { demon_lord: 3, cursed: 2.5, blessed: 0.05 },
       personality: { cruel: 2.5, ambitious: 2.2, greedy: 1.6, kind: 0.15, honorable: 0.2 },
       talents: { shadowstep: 1.4 },

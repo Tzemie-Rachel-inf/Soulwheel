@@ -37,12 +37,14 @@ import {
   outlaws,
 } from './common';
 import { isSingletonClaimed } from '../engine/world';
+import { armorPower, weaponPower } from '../engine/gear';
 import { calculatePowerRating } from '../engine/power';
 import { handDownArms, learnTechnique, passTheTorch } from './legacy';
 import { POWER_WHEELS, canMasterAPower, knownPowers } from './powers';
 import { isRace } from './races';
 import { RENOWN, renownAtLeast } from './renown';
-import { PAYABLE_HOOKS, UNFINISHED_BUSINESS, hasOpenPlace, holyRefusal, isUndead, refusedByHolyPlaces } from './stakes';
+import { PAYABLE_HOOKS, UNFINISHED_BUSINESS, hasOpenPlace, holyRefusal, isConstruct, isUndead, isVampire, refusedByHolyPlaces } from './stakes';
+import { WAY_OF_THE_BLADE_OPTION } from './talents';
 
 // ─── Traits ─────────────────────────────────────────────────────────────────
 
@@ -129,9 +131,24 @@ export const CROSSROADS: WheelStep = {
     { id: 'go_adventure', label: 'Go on an Adventure', description: 'The open road, and whatever is on it.', baseWeight: 24, rarity: 'common', nextStepId: 'road', color: '#7d8a6a', icon: 'Route' },
     { id: 'train', label: 'Train', description: 'Push one stat past where it stands.', baseWeight: 12, rarity: 'common', fameScaling: -0.1, nextStepId: 'train_stat', color: '#b8613a', icon: 'Dumbbell' },
     { id: 'explore', label: 'Explore', description: 'Find out what is past the last map.', baseWeight: 9, rarity: 'common', nextStepId: 'explore', color: '#4f8a5b', icon: 'Compass' },
-    { id: 'find_weapon', label: 'Find a Weapon', description: 'Something sharper than what they carry. Twice as likely for empty hands.', baseWeight: 8, vary: (char) => (char.weaponTier === 0 ? { baseWeight: 16 } : {}), rarity: 'common', condition: (_world, char) => char.weaponTier < BEST_FOUND_GEAR, lockedReason: 'Nothing on the road beats the weapon they carry', nextStepId: 'find_weapon', color: '#a16207', icon: 'Sword' },
-    { id: 'find_armor', label: 'Find Armour', description: 'Something between them and the next blade.', baseWeight: 7, rarity: 'common', condition: (_world, char) => char.armorTier < BEST_FOUND_GEAR, lockedReason: 'Nothing on the road beats the armour they wear', nextStepId: 'find_armor', color: '#6f7a8a', icon: 'Shield' },
-    { id: 'take_quest', label: 'Take a Quest', description: 'A real story: five to seven hard roads, choices that matter, maybe a rival, and an ending shaped by all of it.', baseWeight: 16, rarity: 'common', fameScaling: 0.1, nextStepId: 'quest_hook', color: '#e0a83a', icon: 'ScrollText' },
+    {
+      id: 'rest',
+      label: 'Rest and Recover',
+      description: 'A real bed, a hot meal, time for the wounds to close. Likelier the worse they are hurt.',
+      baseWeight: 6,
+      // Far likelier when hurt. Constructs have the Artificer, vampires the Hunt.
+      vary: (char) => ({ baseWeight: isConstruct(char) || isVampire(char) ? 0 : 4 + 9 * (char.meters?.wounds ?? 0) }),
+      condition: (_world, char) => (char.meters?.wounds ?? 0) > 0.25,
+      lockedReason: 'Not a scratch on them worth resting for',
+      rarity: 'common',
+      fameScaling: -0.05,
+      nextStepId: 'rest',
+      color: '#b0703a',
+      icon: 'Bed',
+    },
+    { id: 'find_weapon', label: 'Find a Weapon', description: 'Something sharper than what they carry. Twice as likely for empty hands.', baseWeight: 8, vary: (char) => (char.weapon === null ? { baseWeight: 16 } : {}), rarity: 'common', condition: (_world, char) => weaponPower(char) < BEST_FOUND_GEAR, lockedReason: 'Nothing on the road beats the weapon they carry', nextStepId: 'find_weapon', color: '#a16207', icon: 'Sword' },
+    { id: 'find_armor', label: 'Find Armour', description: 'Something between them and the next blade.', baseWeight: 7, rarity: 'common', condition: (_world, char) => armorPower(char) < BEST_FOUND_GEAR, lockedReason: 'Nothing on the road beats the armour they wear', nextStepId: 'find_armor', color: '#6f7a8a', icon: 'Shield' },
+    { id: 'take_quest', label: 'Take a Quest', description: 'A real story: five to seven hard roads, choices that matter, maybe a rival, and an ending shaped by all of it.', baseWeight: 16 / 3, rarity: 'common', fameScaling: 0.1, nextStepId: 'quest_hook', color: '#e0a83a', icon: 'ScrollText' },
     { id: 'seek_old_face', label: 'Seek Out an Old Face', description: 'A grave, a rival, a legend, a ruler: someone from the old stories.', baseWeight: 7, rarity: 'common', nextStepId: 'old_faces', color: '#4f86b8', icon: 'Users' },
     { id: 'make_ally', label: 'Make an Ally', description: 'Every legend has a friend in it.', baseWeight: 7, rarity: 'common', nextStepId: 'make_ally', color: '#3f7a9a', icon: 'Handshake' },
     { id: 'hunt', omenScaling: { dragon: 1.5 }, label: 'Hunt a Target', description: 'A bounty, a beast, a name on a list.', baseWeight: 7, rarity: 'common', fameScaling: 0.1, nextStepId: 'hunt', color: '#7a3e2e', icon: 'Crosshair' },
@@ -183,6 +200,7 @@ export const CROSSROADS: WheelStep = {
     { id: 'claim_a_hoard', label: 'Claim a Hoard', description: 'Every dragon has one.', baseWeight: 8, rarity: 'common', requiresRace: ['dragonborn'], nextStepId: 'dragon_hoard', color: '#b8452a', icon: 'Coins' },
     { id: 'the_artificer', label: 'Visit the Artificer', description: 'Repairs and upgrades: what rest and training are to the living.', baseWeight: 10, rarity: 'common', requiresRace: ['construct'], nextStepId: 'artificer', color: '#6a7a8a', icon: 'Wrench' },
     { id: 'raise_the_dead', label: 'Raise the Dead', description: 'There are always more bones.', baseWeight: 8, rarity: 'common', requiresRace: ['skeleton', 'lich'], nextStepId: 'raise_the_dead', color: '#c8c2b0', icon: 'Bone' },
+    WAY_OF_THE_BLADE_OPTION,
     { id: 'raid', label: 'Ride Out With the Band', description: 'Twenty cutthroats, one boss.', baseWeight: 6, rarity: 'common', requiresTrait: ['bandit_band'], nextStepId: 'raid', color: '#7a5a3a', icon: 'Swords' },
     // Unfinished business, come due.
     { id: 'unfinished_business', label: 'Unfinished Business', description: 'Something they left behind has caught up with them: a map, a grudge, a thing that followed them home.', baseWeight: 10, rarity: 'common', requiresTag: PAYABLE_HOOKS, callback: 'Their unfinished business came due', nextStepId: UNFINISHED_BUSINESS, color: '#c9a24c', icon: 'ScrollText' },
@@ -241,6 +259,23 @@ function contest(
 
 // ─── Pursuits ───────────────────────────────────────────────────────────────
 
+/** Rest and Recover: mostly health back, sometimes all of it, sometimes the inn has other ideas. */
+const REST: WheelStep = {
+  id: 'rest',
+  title: 'Rest and Recover',
+  subtitle: 'The road can wait a week. Can it?',
+  options: [
+    { id: 'long_rest', label: 'A Long Rest', description: 'A week of sleep and soup. Most of the hurt is gone.', baseWeight: 40, rarity: 'common', meters: { wounds: -2 }, nextStepId: null, color: '#b0703a', icon: 'Bed' },
+    { id: 'healers_care', label: 'A Healer’s Care', description: 'Clean bandages, bitter tea, a hand that knows what it is doing. Every wound closed.', baseWeight: 22, rarity: 'common', meters: { wounds: -3 }, nextStepId: null, color: '#4d7c5a', icon: 'HeartPulse' },
+    { id: 'hot_springs', label: 'The Hot Springs', description: 'Mountain water that steams in the snow. They come out whole, and a little tougher.', baseWeight: 10, rarity: 'uncommon', meters: { wounds: -3 }, statModifiers: { vitality: 1 }, nextStepId: null, color: '#3fa8a0', icon: 'Droplets' },
+    { id: 'restless_nights', label: 'Restless Nights', description: 'Every time they close their eyes, the last fight again. They heal, a little.', baseWeight: 14, rarity: 'common', meters: { wounds: -1 }, statModifiers: { intellect: -1 }, nextStepId: null, color: '#4a3a6e', icon: 'Moon' },
+    { id: 'robbed_in_sleep', label: 'Robbed in Their Sleep', description: 'They woke rested, and lighter. The innkeeper saw nothing, of course.', baseWeight: 10, rarity: 'uncommon', meters: { wounds: -2 }, luckDelta: -0.5, nextStepId: null, color: '#5a4a3a', icon: 'UserX' },
+    { id: 'fever', label: 'The Wound Went Bad', description: 'The bed was not clean enough. A week of fever, and they rise weaker than they lay down.', baseWeight: 6, rarity: 'uncommon', meters: { wounds: -1 }, statModifiers: { vitality: -1 }, nextStepId: null, color: '#7a1c2e', icon: 'Biohazard' },
+    { id: 'dreamless_sleep', label: 'Slept Like the Dead', description: 'Three days without a dream, and they woke up better than new: whole, sharper, stronger.', baseWeight: 1.5, rarity: 'epic', meters: { wounds: -3 }, statModifiers: { might: 1, agility: 1, vitality: 1 }, nextStepId: null, color: '#c9a24c', icon: 'Sparkles' },
+    { id: 'temple_blessing', label: 'Blessed at the Temple', description: 'A priest laid hands on them, and something laid hands back. Whole, and luckier.', baseWeight: 4, rarity: 'rare', meters: { wounds: -3 }, luckDelta: 0.5, statModifiers: { vitality: 1 }, nextStepId: null, color: '#f5c46a', icon: 'Church' },
+  ],
+};
+
 const EXPLORE: WheelStep = {
   id: 'explore',
   title: 'Where Does the Map End?',
@@ -270,7 +305,7 @@ const FIND_WEAPON: WheelStep = {
     { id: 'blade_chooses_you', label: 'The Blade Chooses You', description: 'A sword in a stone, and it is speaking.', baseWeight: 1, rarity: 'legendary', nextStepId: 'whispering_blade', color: '#6a3a8a', icon: 'Sword' },
     { id: 'heirloom', statScaling: { intellect: 0.02 }, label: 'A Hero’s Heirloom', description: 'Found in a cairn, with a note: "Use it well."', baseWeight: 10, rarity: 'uncommon', ...gearItem('weapon', 3), nextStepId: null, color: '#0e7490', icon: 'Medal' },
     { id: 'cursed_blade', label: 'A Cursed Blade', description: 'It cuts anything. It whispers at night.', baseWeight: 5, rarity: 'rare', ...gearItem('weapon', 4), luckDelta: -0.5, grantTags: ['cursed'], epithet: { text: 'the Cursebound', priority: 30 }, nextStepId: null, color: '#5a2a6e', icon: 'Skull' },
-    { ...gearItem('weapon', 5), id: 'legendary_weapon', statScaling: { intellect: 0.03 }, label: 'A Legendary Weapon', description: 'The one from the songs. It was real.', baseWeight: 1.2, rarity: 'legendary', grantTraits: ['legendary_weapon'], epithet: { text: 'Wielder of Legends', priority: 62 }, nextStepId: null, color: '#ffb84d', icon: 'Swords' },
+    { ...gearItem('weapon', 5), gear: { weapon: { unique: 'songblade' } }, id: 'legendary_weapon', statScaling: { intellect: 0.03 }, label: 'A Legendary Weapon', description: 'The one from the songs. It was real.', baseWeight: 1.2, rarity: 'legendary', epithet: { text: 'Wielder of Legends', priority: 62 }, nextStepId: null, color: '#ffb84d', icon: 'Swords' },
     { ...gearItem('weapon', 4), id: 'reforged', label: 'Reforged an Old Blade', description: 'A broken sword, a borrowed forge, and their own two hands.', baseWeight: 8, rarity: 'rare', requiresTrait: ['skill_smithing', 'master_crafter', 'runesmith'], nextStepId: null, color: '#8a6a3a', icon: 'Anvil' },
   ],
 };
@@ -374,7 +409,7 @@ const CONTESTS: WheelStep[] = [
     { label: 'Lifted It', description: 'The crowd roared. Their back complained.', statModifiers: { might: 1 }, color: '#b8613a', icon: 'BicepsFlexed' },
     { label: 'Didn’t Budge', description: 'The stone won. It always wins. Their back lost.', meters: { wounds: 1 }, color: '#6e6a62', icon: 'Mountain' },
     { label: 'Threw It', description: 'Over the wall. Into the next village.', statModifiers: { might: 3 }, epithet: { text: 'the Stone-Thrower', priority: 35 }, color: '#f08a62', icon: 'Trophy' },
-    { label: 'Pulled the Sword From the Stone', description: 'The stone had a sword in it all along. Nobody else ever got it to move.', gear: { weapon: 6 }, fame: 20, epithet: { text: 'Who Drew the Sword', priority: 75 }, color: '#ffe08a', icon: 'Sword' },
+    { label: 'Pulled the Sword From the Stone', description: 'The stone had a sword in it all along. Nobody else ever got it to move.', gear: { weapon: { unique: 'stone_sword' } }, fame: 20, epithet: { text: 'Who Drew the Sword', priority: 75 }, color: '#ffe08a', icon: 'Sword' },
   ),
   contest(
     'drinking_contest',
@@ -992,7 +1027,7 @@ const ACTIVITY_FIGHTS: WheelStep[] = [
     foeOf: (c) => ({ name: 'Death', power: Math.max(200, Math.round(calculatePowerRating(c) * 1.2)) }),
     deadliness: 0.6,
     victory: { label: 'Beat Death at Its Own Game', description: 'It paid up. Death owes them one, now: the next time it comes, it will go away again.', grantTraits: ['cheated_death'], epithet: { text: 'Who Beat Death', priority: 80 } },
-    glory: { label: 'Death Gave Them Its Scythe', description: 'A good loser. A very sharp scythe.', rarity: 'legendary', grantTraits: ['cheated_death'], gear: { weapon: 7 }, epithet: { text: 'Death’s Equal', priority: 86 } },
+    glory: { label: 'Death Gave Them Its Scythe', description: 'A good loser. A very sharp scythe.', rarity: 'legendary', grantTraits: ['cheated_death'], gear: { weapon: { unique: 'deaths_scythe' } }, epithet: { text: 'Death’s Equal', priority: 86 } },
     retreat: { label: 'Death Let Them Go', description: 'This time. It wrote their name down.', luckDelta: -0.5 },
     slain: { label: 'Lost the Game', description: 'Death collected.', fate: 'Challenged Death to a game, and lost' },
   }),
@@ -1021,6 +1056,7 @@ const ROAD_HOME: WheelStep = {
 export const ACTIVITY_STEPS: WheelStep[] = [
   CROSSROADS,
   ROAD_HOME,
+  REST,
   EXPLORE,
   FIND_WEAPON,
   MAKE_ALLY,

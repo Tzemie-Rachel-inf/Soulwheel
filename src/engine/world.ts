@@ -4,7 +4,7 @@ import type { Character, SingletonKey, World } from './types';
 
 export function createWorld({ rng = defaultRng, now = Date.now() }: { rng?: Rng; now?: number } = {}): World {
   return {
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: createId('wld', rng),
     createdAt: now,
     activeSingletons: {},

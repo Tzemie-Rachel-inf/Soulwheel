@@ -20,6 +20,13 @@
  *
  * Sound (sound.ts) follows the same beats: a tick per lead line, a sting on landing by rarity,
  * a clang per blow.
+ *
+ * Archetypes (engine/archetypes.ts) reach in three ways, all optional:
+ *   smash   – a Brute's hub turns into a Smash button while the wheel spins: it stops dead, and
+ *             the slice under the pointer is reported (`onSmash`) as the roll
+ *   decree  – an Ancient names the result: while `decreeing`, a click on a slice is reported (`onDecree`)
+ *   drag    – a Hero's wheel slows as holy slices (`drag`) pass the pointer. The result was decided
+ *             before the spin; only the time spent over them grows.
  */
 import {
   useCallback,
@@ -31,12 +38,14 @@ import {
   type CSSProperties,
   type MouseEvent,
   type PointerEvent,
+  type Ref,
 } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Lock } from 'lucide-react';
 import { forceNextRoll } from '../../engine/roll';
 import { createSeededRng } from '../../engine/rng';
 import { useDevPick } from '../devPick';
+import { spinDuration, useSettings } from '../settings';
 import { RARITIES, type ResolvedSlice } from '../../engine/types';
 import { formatPercent, optionLabel } from '../format';
 import { sound } from '../sound';
@@ -105,7 +114,17 @@ export interface SpinWheelProps {
   golden?: boolean;
   maxSize?: number;
   fontFamily?: string;
+  /** A Brute's Smash: while spinning, the hub stops the wheel dead and reports the slice under the pointer. */
+  onSmash?: (spinId: number, index: number) => void;
+  /** An Ancient deciding a roll: a click on an open slice is reported instead of spinning. */
+  decreeing?: boolean;
+  onDecree?: (index: number) => void;
+  /** Slices the wheel drags over as they pass the pointer (a Hero's holy slices), by index. */
+  drag?: readonly number[];
 }
+
+/** How fast a spin runs while a dragging slice is under the pointer: under half speed. */
+const DRAG_RATE = 0.4;
 
 /**
  * How near the line still counts as a near miss: within this many degrees of it, and in the outer
@@ -115,6 +134,11 @@ const NEAR_MISS_DEGREES = 4;
 const NEAR_MISS_MARGIN = 0.34;
 /** When a big prize sits right beside the result, how often the wheel stops a hair short of it. */
 const TEASE_CHANCE = 0.07;
+/** Dramatic speed: a spin for something great (or past it) takes this much longer, and teases more. */
+const DRAMA_STRETCH = 1.8;
+const DRAMA_TEASE_CHANCE = 0.45;
+/** Dramatic speed's ease: most of the way fast, then a long, agonising crawl. */
+const dramaEase = (t: number) => 1 - (1 - Math.min(1, Math.max(0, t))) ** 7;
 
 /** Worth an "So close!": a slice that is open, rarer than the one landed, and legendary or better (or epic, after a common). */
 function missedBig(won: ResolvedSlice, other: ResolvedSlice): boolean {
@@ -142,16 +166,30 @@ export function SpinWheel({
   golden = false,
   maxSize = 560,
   fontFamily = DEFAULT_FONT,
+  onSmash,
+  decreeing = false,
+  onDecree,
+  drag,
 }: SpinWheelProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const rotorRef = useRef<HTMLDivElement>(null);
   const pointerRef = useRef<SVGSVGElement>(null);
+  const marqueeRef = useRef<SVGSVGElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rotationRef = useRef(0);
   const spinningRef = useRef(false);
   const onSettledRef = useRef(onSettled);
   const onUpgradedRef = useRef(onUpgraded);
+  const onSmashRef = useRef(onSmash);
+  /** The frame loop of the spin under way, so a Smash can stop it. */
+  const rafRef = useRef(0);
+  /** Set by a Smash: the spin under way stops where it is and never settles. */
+  const smashedRef = useRef(false);
+  const dragRef = useRef<ReadonlySet<number>>(new Set());
   const reduceMotion = useReducedMotion() ?? false;
+  const { wheelSpeed } = useSettings();
+  /** The last spin a Smash stopped: the wheel shakes. */
+  const [smashed, setSmashed] = useState<number | null>(null);
 
   const [size, setSize] = useState(0);
   const [fontEpoch, setFontEpoch] = useState(0);
@@ -178,6 +216,12 @@ export function SpinWheel({
   useEffect(() => {
     onUpgradedRef.current = onUpgraded;
   }, [onUpgraded]);
+  useEffect(() => {
+    onSmashRef.current = onSmash;
+  }, [onSmash]);
+  useEffect(() => {
+    dragRef.current = new Set(drag ?? []);
+  }, [drag]);
   useEffect(() => {
     arcsRef.current = arcs;
     slicesRef.current = slices;
@@ -244,31 +288,41 @@ export function SpinWheel({
       return;
     }
     const from = rotationRef.current;
-    const duration = Math.max(1, reduceMotion ? Math.min(REDUCED_SPIN_MS, spinMs) : spinMs);
     // Now and then, when a big prize is right next door, stop a hair short of it: a real near miss.
     const landed = slicesRef.current[spin.targetIndex];
     const sides = neighboursOf(layout, spin.targetIndex);
     const prizes = landed && sides ? (['start', 'end'] as const).filter((side) => { const other = slicesRef.current[sides[side]]; return other && missedBig(landed, other); }) : [];
-    const tease = prizes.length > 0 && Math.random() < TEASE_CHANCE ? prizes[Math.floor(Math.random() * prizes.length)] : undefined;
+    // Dramatic: landing on something great, or right beside it, slows the end to a crawl.
+    const drama = wheelSpeed === 'dramatic' && !reduceMotion && (prizes.length > 0 || (landed !== undefined && RARITIES.indexOf(rarityOf(landed.option)) >= RARITIES.indexOf('epic')));
+    const base = spinDuration(spinMs, wheelSpeed);
+    const duration = Math.max(1, reduceMotion ? Math.min(REDUCED_SPIN_MS, base) : drama ? base * DRAMA_STRETCH : base);
+    const ease = drama ? dramaEase : spinEase;
+    const tease = prizes.length > 0 && Math.random() < (drama ? DRAMA_TEASE_CHANCE : TEASE_CHANCE) ? prizes[Math.floor(Math.random() * prizes.length)] : undefined;
     const to = targetRotation(from, arc, {
       turns: reduceMotion ? 1 : 5 + Math.floor(Math.random() * 3),
       offset: 0.2 + Math.random() * 0.6, // land somewhere inside the slice, never on a lead line
       ...(tease && { edge: { side: tease, degrees: 1.5 + Math.random() * 2.5 } }),
     });
 
-    let raf = 0;
-    let startedAt: number | null = null;
+    // Time runs slower while a dragging slice is under the pointer (a Hero's holy slices).
+    let elapsed = 0;
+    let lastFrame: number | null = null;
     let lastBoundary = boundaryCount(from, layout);
     let tickAt = Number.NEGATIVE_INFINITY;
     spinningRef.current = true;
+    smashedRef.current = false;
     setSpinning(true);
     setHover(null);
     setNearMiss(null);
 
     const frame = (now: number) => {
-      startedAt ??= now;
-      const t = (now - startedAt) / duration;
-      const rotation = from + (to - from) * spinEase(t);
+      if (smashedRef.current) return;
+      const dt = lastFrame === null ? 0 : now - lastFrame;
+      lastFrame = now;
+      const dragging = dragRef.current.size > 0 && dragRef.current.has(sliceAtScreenAngle(0, rotationRef.current, layout));
+      elapsed += dragging && !reduceMotion ? dt * DRAG_RATE : dt;
+      const t = elapsed / duration;
+      const rotation = from + (to - from) * ease(t);
       applyRotation(rotation);
 
       const boundary = boundaryCount(rotation, layout);
@@ -276,6 +330,9 @@ export function SpinWheel({
         lastBoundary = boundary;
         tickAt = now;
         sound.tick(Math.max(0, 1 - t));
+        // The marquee chases one step per lead line: fast off the mark, crawling at the end.
+        const marquee = marqueeRef.current;
+        if (marquee) marquee.dataset.phase = marquee.dataset.phase === '0' ? '1' : '0';
       }
       if (pointerRef.current) {
         const kick = Math.exp(-(now - tickAt) / 90);
@@ -283,7 +340,7 @@ export function SpinWheel({
       }
 
       if (t < 1) {
-        raf = requestAnimationFrame(frame);
+        rafRef.current = requestAnimationFrame(frame);
         return;
       }
       applyRotation(to);
@@ -303,17 +360,17 @@ export function SpinWheel({
     };
     // Instant spins land on the spot rather than waiting for a frame.
     if (duration <= 1) {
-      startedAt = performance.now();
-      frame(startedAt + duration);
+      elapsed = duration;
+      frame(performance.now());
     } else {
-      raf = requestAnimationFrame(frame);
+      rafRef.current = requestAnimationFrame(frame);
     }
 
     return () => {
-      cancelAnimationFrame(raf);
+      cancelAnimationFrame(rafRef.current);
       spinningRef.current = false;
     };
-  }, [spin, reduceMotion, spinMs, applyRotation]);
+  }, [spin, reduceMotion, spinMs, wheelSpeed, applyRotation]);
 
   /** A blow knocks the wheel over to slice `index`: a quick, overshooting turn (a CSS transition, so it needs no frames). */
   const joltTo = useCallback(
@@ -375,17 +432,49 @@ export function SpinWheel({
 
   // Dev pick mode: a click on an open slice spins the wheel and lands it there.
   const handlePick = (e: MouseEvent<HTMLDivElement>) => {
-    if (!devPick || !canSpin || spinningRef.current || size === 0) return;
+    const picking = decreeing && onDecree;
+    if ((!devPick && !picking) || !canSpin || spinningRef.current || size === 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const dx = e.clientX - rect.left - rect.width / 2;
     const dy = e.clientY - rect.top - rect.height / 2;
     const r = Math.hypot(dx, dy) / (size / 2);
     if (r < L.hub || r > 1) return;
-    const slice = slices[sliceAtScreenAngle(screenAngleOf(dx, dy), rotationRef.current, arcs)];
-    if (!slice || slice.locked) return;
+    const index = sliceAtScreenAngle(screenAngleOf(dx, dy), rotationRef.current, arcs);
+    const slice = slices[index];
+    if (!slice || slice.locked || slice.effectiveWeight <= 0) return;
+    if (picking) {
+      onDecree(index);
+      return;
+    }
     forceNextRoll(slice.option.id);
     onSpinRequest();
   };
+
+  /** A Brute's Smash: the spin stops where it is, the wheel shakes, and the slice under the pointer is the roll. */
+  const smashNow = () => {
+    if (!spin || !spinningRef.current || smashedRef.current) return;
+    smashedRef.current = true;
+    cancelAnimationFrame(rafRef.current);
+    spinningRef.current = false;
+    if (pointerRef.current) pointerRef.current.style.transform = 'rotate(0deg)';
+    setSpinning(false);
+    setLandedSpin(spin.id);
+    setSmashed(spin.id);
+    sound.hammer(true);
+    if (!reduceMotion) {
+      frameRef.current?.animate(
+        [{ transform: 'translate(0, 0)' }, { transform: 'translate(-7px, 4px) rotate(-0.6deg)' }, { transform: 'translate(6px, -3px) rotate(0.5deg)' }, { transform: 'translate(-3px, 1px)' }, { transform: 'translate(0, 0)' }],
+        { duration: 280, easing: 'ease-out' },
+      );
+    }
+    onSmashRef.current?.(spin.id, sliceAtScreenAngle(0, rotationRef.current, arcsRef.current));
+  };
+
+  // A Smash that landed on a locked slice was moved to the nearest open one: the wheel jolts there.
+  useEffect(() => {
+    if (smashed === null || highlightIndex === null) return;
+    if (sliceAtScreenAngle(0, rotationRef.current, arcsRef.current) !== highlightIndex) joltTo(highlightIndex);
+  }, [smashed, highlightIndex, joltTo]);
 
   const R = size / 2;
   const paintR = size / 2 - 1; // the radius paintWheel uses, so roundels and icons agree
@@ -394,6 +483,7 @@ export function SpinWheel({
   // The rarity burst waits for any bump to finish: it celebrates where the result ends up.
   const landedRarity = !upgrade && lit !== null && slices[lit] ? rarityOf(slices[lit].option) : null;
   const effect = upgrade ? upgradeEffect(upgrade.effect) : null;
+  const marqueeMode: MarqueeMode = spinning ? 'spinning' : lit !== null ? 'landed' : 'idle';
   // Only while the result still sits where it landed: a bump that moved it settles the matter.
   const missed = nearMiss && !spinning && !upgrade && nearMiss.spin === landedSpin && lit === nearMiss.index ? nearMiss.slice : null;
   const hoveredArc = hover ? arcs[hover.index] : undefined;
@@ -404,7 +494,8 @@ export function SpinWheel({
       role="group"
       aria-label={label}
       className="relative mx-auto w-full select-none"
-      style={{ maxWidth: maxSize, height: size || undefined }}
+      // Never taller than the screen leaves room for (a landscape phone sees the whole wheel).
+      style={{ maxWidth: `min(${maxSize}px, calc(100svh - 7rem))`, height: size || undefined }}
     >
       {size > 0 && (
         <>
@@ -420,11 +511,20 @@ export function SpinWheel({
             onPointerMove={handlePointerMove}
             onPointerLeave={() => setHover(null)}
             onClick={handlePick}
-            style={devPick && canSpin && !spinning ? { cursor: 'crosshair' } : undefined}
+            style={(devPick || decreeing) && canSpin && !spinning ? { cursor: 'crosshair' } : undefined}
           >
             <div ref={rotorRef} className="absolute inset-0" style={{ willChange: 'transform' }}>
               <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 h-full w-full" />
               <RaritySparkle slices={slices} arcs={arcs} size={size} highlightIndex={lit} />
+              <Marquee
+                slices={slices}
+                arcs={arcs}
+                size={size}
+                mode={marqueeMode}
+                litIndex={lit}
+                jackpot={landedRarity && isSpecialRarity(landedRarity) ? RARITY_STYLES[landedRarity].color : null}
+                marqueeRef={marqueeRef}
+              />
               {slices.map((slice, i) => {
                 const arc = arcs[i];
                 const roundel = arc ? roundelPx(arc.sweep, paintR) : 0;
@@ -471,8 +571,9 @@ export function SpinWheel({
           <button
             type="button"
             data-spin-button
-            onClick={onSpinRequest}
-            disabled={!canSpin || spinning}
+            onClick={onSmash && spinning ? smashNow : onSpinRequest}
+            disabled={onSmash && spinning ? false : !canSpin || spinning}
+            aria-label={onSmash && spinning ? 'Smash the wheel to a stop' : undefined}
             className="font-display absolute z-10 flex items-center justify-center rounded-full border-[3px] border-lead text-candle transition-[filter,color] duration-200 enabled:hover:brightness-125 disabled:cursor-not-allowed disabled:text-candle/35"
             style={{
               width: hubSize,
@@ -486,7 +587,7 @@ export function SpinWheel({
               textShadow: '0 2px 0 rgba(0, 0, 0, 0.6)',
             }}
           >
-            {hubLabel}
+            {onSmash && spinning ? 'Smash!' : hubLabel}
           </button>
 
           {landedRarity && isSpecialRarity(landedRarity) && <LandingBurst key={`${landedSpin}:${lit}`} rarity={landedRarity} size={size} />}
@@ -524,14 +625,14 @@ export function SpinWheel({
           <svg
             ref={pointerRef}
             aria-hidden="true"
-            viewBox="0 0 40 56"
+            viewBox="0 0 40 64"
             className="pointer-events-none absolute z-20"
             style={{
               width: R * 0.15,
-              height: R * 0.21,
+              height: R * 0.24,
               left: R - R * 0.075,
               top: -R * 0.05,
-              transformOrigin: '50% 27%',
+              transformOrigin: '50% 23.4%',
               filter: 'drop-shadow(0 3px 3px rgba(0, 0, 0, 0.5))',
             }}
           >
@@ -542,6 +643,8 @@ export function SpinWheel({
                 <stop offset="1" stopColor="#7d5f20" />
               </linearGradient>
             </defs>
+            {/* The clapper: a leather tongue that slaps each stud as it passes, the way a prize wheel clacks. */}
+            <path d="M17 49 L20 63 L23 49 Z" fill="#6b3a1c" stroke="#2a1508" strokeWidth="1.5" strokeLinejoin="round" />
             <path
               d="M20 54 L6.5 22 A14 14 0 1 1 33.5 22 Z"
               fill="url(#wheel-pointer-gilt)"
@@ -596,10 +699,9 @@ function SliceTooltip({ slice, share, left, top }: { slice: ResolvedSlice; share
 }
 
 /**
- * Animated rarity effects, inside the rotor so they turn with the glass: stars that
- * twinkle along the gem band of rare-and-better slices, and for epic and legendary a
- * slow pulse of light behind the pane. Locked and dimmed slices stay dark.
- * Screen-blended over the canvas, so it only ever adds light.
+ * Light pulsing behind the glass of epic-and-better slices, inside the rotor so it turns with
+ * the panes. (Rare-and-better twinkle lives in the marquee bulbs over their stretch of rim.)
+ * Locked and dimmed slices stay dark. Screen-blended over the canvas, so it only ever adds light.
  */
 function RaritySparkle({
   slices,
@@ -618,12 +720,9 @@ function RaritySparkle({
     const arc = arcs[i];
     const style = rarityStyle(slice.option);
     const dimmed = highlightIndex !== null && highlightIndex !== i;
-    return arc && arc.sweep > 0 && style.sparkles > 0 && !slice.locked && !dimmed ? [{ slice, arc, style, i }] : [];
+    return arc && arc.sweep > 0 && style.glow > 0 && !slice.locked && !dimmed ? [{ slice, arc, style, i }] : [];
   });
   if (lit.length === 0) return null;
-
-  const rimRadius = R * ((L.glassEdge + 1) / 2);
-  const star = R * 0.03;
 
   return (
     <svg
@@ -648,34 +747,83 @@ function RaritySparkle({
           </radialGradient>
         ))}
       </defs>
-      {lit.map(({ slice, arc, style, i }) => {
-        // Stars sit on the rim band, spread evenly with a seeded jitter, clear of the gilt studs.
-        const arcLength = (rimRadius * arc.sweep * Math.PI) / 180;
-        const count = Math.max(1, Math.min(style.sparkles, Math.floor(arcLength / (star * 3.2))));
-        const rng = createSeededRng(i * 104729 + slices.length);
+      {lit.map(({ slice, arc, style, i }) => (
+        <path
+          key={slice.option.id}
+          d={wedge(c, R * L.glassEdge, R * L.hub, arc)}
+          fill={`url(#rarity-glow-${slice.option.id})`}
+          className="rarity-pulse"
+          style={{ '--glow': style.glow, animationDelay: `${-createSeededRng(i * 104729 + slices.length)() * 3}s` } as CSSProperties}
+        />
+      ))}
+    </svg>
+  );
+}
+
+/** Candle-gold glass for an ordinary bulb; rare-and-better slices' bulbs burn in their rarity. */
+const BULB_GOLD = '#f0cd6c';
+/** About one bulb per this many wheel radii of rim, kept clear of the gilt studs on the lead lines. */
+const BULB_SPACING = 0.105;
+
+export type MarqueeMode = 'idle' | 'spinning' | 'landed';
+
+/**
+ * The marquee: bulbs set into the gilt rim, a run of them along each slice's stretch, inside the
+ * rotor so they turn with the wheel. What they do is all CSS (index.css, "marquee"), keyed off
+ * data attributes the wheel sets:
+ *   idle     – a slow, warm two-step chase
+ *   spinning – the chase steps once per lead line passing the pointer (`data-phase`, flipped from
+ *              the spin's frame loop without a render), so it slows as the wheel slows
+ *   landed   – the winner's bulbs flare; the rest go dark. A rare-or-better landing first flashes
+ *              every bulb in its rarity (`data-jackpot`), then settles.
+ */
+function Marquee({
+  slices,
+  arcs,
+  size,
+  mode,
+  litIndex,
+  jackpot,
+  marqueeRef,
+}: {
+  slices: readonly ResolvedSlice[];
+  arcs: readonly SliceArc[];
+  size: number;
+  mode: MarqueeMode;
+  litIndex: number | null;
+  jackpot: string | null;
+  marqueeRef: Ref<SVGSVGElement>;
+}) {
+  const c = size / 2;
+  const R = size / 2 - 1;
+  const ring = R * ((L.glassEdge + 1) / 2);
+  const bulb = Math.max(2.2, R * 0.019);
+  return (
+    <svg
+      ref={marqueeRef}
+      aria-hidden="true"
+      viewBox={`0 0 ${size} ${size}`}
+      className="marquee pointer-events-none absolute inset-0 h-full w-full"
+      data-mode={mode}
+      data-phase="0"
+      {...(jackpot && { 'data-jackpot': '' })}
+      style={jackpot ? ({ '--jackpot': jackpot } as CSSProperties) : undefined}
+    >
+      {slices.map((slice, i) => {
+        const arc = arcs[i];
+        if (!arc || arc.sweep <= 0) return null;
+        // Bulbs sit between the studs: none closer than a bulb-and-a-half to either lead line.
+        const length = (ring * arc.sweep * Math.PI) / 180;
+        const count = Math.floor(length / (R * BULB_SPACING));
+        if (count === 0) return null;
+        const rarity = rarityOf(slice.option);
+        const tint = isSpecialRarity(rarity) ? RARITY_STYLES[rarity].color : BULB_GOLD;
+        const hot = mode === 'landed' && litIndex === i;
         return (
-          <g key={slice.option.id}>
-            {style.glow > 0 && (
-              <path
-                d={wedge(c, R * L.glassEdge, R * L.hub, arc)}
-                fill={`url(#rarity-glow-${slice.option.id})`}
-                className="rarity-pulse"
-                style={{ '--glow': style.glow, animationDelay: `${-rng() * 3}s` } as CSSProperties}
-              />
-            )}
+          <g key={slice.option.id} className={hot ? 'bulbs-hot' : isSpecialRarity(rarity) ? 'bulbs-rare' : undefined} style={{ '--tint': tint } as CSSProperties}>
             {Array.from({ length: count }, (_, k) => {
-              const along = 0.18 + (0.64 * (k + 0.5 + (rng() - 0.5) * 0.5)) / count;
-              const p = polar(rimRadius * (0.97 + rng() * 0.06), arc.start + arc.sweep * along);
-              const s = star * (0.75 + rng() * 0.45);
-              return (
-                <path
-                  key={k}
-                  d={sparklePath(c + p.x, c + p.y, s)}
-                  fill={k % 2 === 0 ? '#fffaf0' : style.color}
-                  className="rarity-twinkle"
-                  style={{ animationDelay: `${-(rng() * 2).toFixed(2)}s`, animationDuration: `${1.6 + rng() * 1.2}s` }}
-                />
-              );
+              const p = polar(ring, arc.start + (arc.sweep * (k + 0.5)) / count);
+              return <circle key={k} className={k % 2 === 0 ? 'bulb bulb-a' : 'bulb bulb-b'} cx={c + p.x} cy={c + p.y} r={bulb} />;
             })}
           </g>
         );
@@ -704,9 +852,4 @@ function wedge(c: number, outer: number, inner: number, arc: SliceArc): string {
     `A ${inner} ${inner} 0 ${large} 0 ${c + i2.x} ${c + i2.y}`,
     'Z',
   ].join(' ');
-}
-
-/** A four-pointed twinkle star centred on (x, y). */
-function sparklePath(x: number, y: number, s: number): string {
-  return `M ${x} ${y - s} Q ${x} ${y} ${x + s} ${y} Q ${x} ${y} ${x} ${y + s} Q ${x} ${y} ${x - s} ${y} Q ${x} ${y} ${x} ${y - s} Z`;
 }

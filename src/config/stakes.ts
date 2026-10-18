@@ -71,9 +71,10 @@ export const METERS: MeterDef[] = [
   },
   {
     id: 'wounds',
-    label: 'Wounds',
-    short: 'WND',
-    description: 'Every lost fight and bad fall leaves one. A night by the fire heals them. At 3, they fester.',
+    // Shown as Health, read the other way round (engine/hp.ts): three wounds is none left.
+    label: 'Health',
+    short: 'HP',
+    description: 'Every lost fight and bad fall costs some, and a battle can take any of it. A night by the fire restores it. At none, the wounds fester.',
     max: 3,
     color: '#e0634a',
     icon: 'HeartCrack',
@@ -306,6 +307,7 @@ const FESTERING: WheelStep = {
     { id: 'fever_dreams', label: 'Fever Dreams', description: 'Three nights of fever, and in it, a vision of something that hasn’t happened yet.', baseWeight: 14, rarity: 'uncommon', statModifiers: { arcana: 2, intellect: -1 }, grantTags: ['hook:prophecy'], nextStepId: null, color: '#7a5ad0', icon: 'Moon' },
     { id: 'never_closed', label: 'A Wound That Never Closed', description: 'It aches when it rains. It always rains.', baseWeight: 12, rarity: 'uncommon', statModifiers: { vitality: -3, might: -1 }, nextStepId: null, color: '#7a2e2e', icon: 'HeartCrack' },
     { id: 'died_of_wounds', label: 'Died of Their Wounds', description: 'Not in battle. In a bed, slowly, on the fourth night.', baseWeight: 8, rarity: 'uncommon', setStatus: 'fallen', condition: IRON_WILL_SAVES, lockedReason: deathCheatReason, fate: 'Died of wounds that never healed', nextStepId: null, color: '#7f1d1d', icon: 'Skull' },
+    // Iron Will's price: they get up from every blow, and never stay down long enough to heal.
     { ...notIf(isUndead, 'Already dead, and not that kind of mercy'), id: 'saints_mercy', label: 'A Wandering Saint', description: 'A stranger laid hands on them, and every wound closed at once.', baseWeight: 4, rarity: 'epic', grantTraits: ['saints_mercy'], statModifiers: { vitality: 4 }, luckDelta: 0.5, epithet: { text: 'the Mended', priority: 40 }, nextStepId: null, color: '#ffe8a8', icon: 'HandHeart' },
     {
       ...notIf((c) => isUndead(c) || isConstruct(c), 'There is nothing left in them to come back wrong'),
@@ -447,7 +449,7 @@ const SKY_DOOR: WheelStep = {
   subtitle: 'Above the clouds there is another country, and it has been expecting someone.',
   options: [
     { id: 'fell_back', label: 'Fell Back to Earth', description: 'The door closed behind them. The ground was a long way down.', baseWeight: 30, rarity: 'common', meters: { wounds: 2 }, luckDelta: 0.25, nextStepId: null, color: '#6b7280', icon: 'CloudFog' },
-    { id: 'star_forge', label: 'A Forge of Fallen Stars', description: 'A blade cooled in starlight. It never quite stops glowing.', baseWeight: 22, rarity: 'uncommon', weaponTierDelta: 3, nextStepId: null, color: '#8abaf0', icon: 'Star' },
+    { id: 'star_forge', label: 'A Forge of Fallen Stars', description: 'A blade cooled in starlight. It never quite stops glowing.', baseWeight: 22, rarity: 'uncommon', weaponTierDelta: 3, upgrade: true, nextStepId: null, color: '#8abaf0', icon: 'Star' },
     { id: 'sky_folk', label: 'The Sky-Folk Took Them In', description: 'A season among people who have never touched the ground.', baseWeight: 18, rarity: 'uncommon', grantTraits: ['skyborn'], statModifiers: { arcana: 3, agility: 2 }, nextStepId: null, color: '#c0d8f0', icon: 'Cloud' },
     { id: 'waystation', label: 'The Gods’ Waystation', description: 'Where gods rest between worlds. One of them left something behind.', baseWeight: 8, rarity: 'epic', luckDelta: 0.5, ...{ condition: refusedByHolyPlaces, lockedReason: holyRefusal }, nextStepId: POWER_WHEELS.blessed, color: '#fff4c2', icon: 'Sun' },
     { id: 'floating_citadel', label: 'Lord of a Floating Citadel', description: 'An empty castle on a cloud, and the cloud decided they belong to it.', baseWeight: 6, rarity: 'legendary', grantTraits: ['sky_citadel'], fame: 25, epithet: { text: 'Lord of the Floating Citadel', priority: 80 }, nextStepId: null, color: '#ffe08a', icon: 'Castle' },
@@ -562,7 +564,7 @@ const DRAGON_HOARD: WheelStep = {
   options: [
     { id: 'respectable_pile', label: 'A Respectable Pile', description: 'Not a mountain. A start.', baseWeight: 30, rarity: 'common', luckDelta: 0.5, nextStepId: null, color: '#d9a400', icon: 'Coins' },
     { id: 'took_from_a_drake', label: 'Took One From a Drake', description: 'A young drake, a short argument, a bigger pile.', baseWeight: 24, rarity: 'common', weaponTierDelta: 1, armorTierDelta: 1, meters: { wounds: 1 }, nextStepId: null, color: '#b8452a', icon: 'Flame' },
-    { id: 'scales_like_iron', label: 'Scales Like Iron', description: 'Sleeping on gold does something to the hide.', baseWeight: 16, rarity: 'uncommon', armorTierDelta: 2, nextStepId: null, color: '#8a6a3a', icon: 'Shield' },
+    { id: 'scales_like_iron', label: 'Scales Like Iron', description: 'Sleeping on gold does something to the hide.', baseWeight: 16, rarity: 'uncommon', armorTierDelta: 2, upgrade: true, nextStepId: null, color: '#8a6a3a', icon: 'Shield' },
     { id: 'a_dragon_noticed', label: 'A Dragon Noticed', description: 'A real one. It wants its gold back, and theirs too.', baseWeight: 14, rarity: 'uncommon', nextStepId: 'fight_dragon', color: '#7a2e2e', icon: 'Skull' },
     { id: 'wings_unfurl', label: 'Wings Unfurl', description: 'One morning, they simply had them.', baseWeight: 4, rarity: 'epic', grantTraits: ['dragon_wings'], epithet: { text: 'the Winged', priority: 58 }, nextStepId: null, color: '#c0569a', icon: 'Feather' },
     { id: 'dragon_council', label: 'Summoned by the Dragon Council', description: 'Seven great dragons on seven mountains, and an empty eighth seat.', baseWeight: 2, rarity: 'legendary', grantTraits: ['dragon_council'], epithet: { text: 'Voice of the Dragon Council', priority: 74 }, nextStepId: null, color: '#ffe08a', icon: 'Crown' },
@@ -575,7 +577,7 @@ const ARTIFICER: WheelStep = {
   subtitle: 'Oil, gears, and a workshop that smells of lightning.',
   options: [
     { id: 'full_repairs', label: 'Full Repairs', description: 'Every dent hammered out, every joint oiled.', baseWeight: 34, rarity: 'common', meters: { wounds: -4 }, statModifiers: { vitality: 1 }, nextStepId: null, color: '#6a7a8a', icon: 'Wrench' },
-    { id: 'reinforced_plating', label: 'Reinforced Plating', description: 'Heavier. Much heavier. Worth it.', baseWeight: 24, rarity: 'common', armorTierDelta: 1, meters: { wounds: -2 }, nextStepId: null, color: '#5f6470', icon: 'Shield' },
+    { id: 'reinforced_plating', label: 'Reinforced Plating', description: 'Heavier. Much heavier. Worth it.', baseWeight: 24, rarity: 'common', armorTierDelta: 1, upgrade: true, meters: { wounds: -2 }, nextStepId: null, color: '#5f6470', icon: 'Shield' },
     { id: 'a_new_arm', label: 'A New Arm', description: 'Stronger than the old one. It occasionally waves on its own.', baseWeight: 16, rarity: 'uncommon', statModifiers: { might: 3 }, nextStepId: null, color: '#b8862e', icon: 'Cog' },
     { id: 'botched_upgrade', label: 'A Botched Upgrade', description: 'Something sparked. Something else stopped.', baseWeight: 12, rarity: 'uncommon', statModifiers: { agility: -1 }, meters: { wounds: 1 }, nextStepId: null, color: '#7a3a2e', icon: 'Zap' },
     { id: 'runic_core', label: 'A Runic Core', description: 'A heart of carved light, and it never stops.', baseWeight: 4, rarity: 'epic', grantTraits: ['runic_core'], statModifiers: { arcana: 3 }, epithet: { text: 'the Rune-Driven', priority: 52 }, nextStepId: null, color: '#3fa8a0', icon: 'Cpu' },
@@ -664,7 +666,7 @@ const BLADE_DEMANDS: WheelStep = {
     { id: 'fed_it_a_bandit_lord', label: 'Fed It a Bandit Lord', description: 'Someone who had it coming. The blade did not care.', baseWeight: 34, rarity: 'common', removeTags: ['hook:blade_hungers'], statModifiers: { might: 2 }, nextStepId: null, color: '#6a3a8a', icon: 'Sword' },
     { id: 'it_bit_them', label: 'It Took a Bite of Them', description: 'If nobody else will feed it.', baseWeight: 26, rarity: 'common', meters: { wounds: 2 }, nextStepId: null, color: '#7a2e2e', icon: 'HeartCrack' },
     { id: 'fed_it_an_innocent', label: 'Fed It an Innocent', description: 'It moved their arm. That is what they tell themselves.', baseWeight: 14, rarity: 'uncommon', removeTags: ['hook:blade_hungers'], meters: { notoriety: 3 }, fame: -5, nextStepId: null, color: '#3a0a1a', icon: 'Skull' },
-    { id: 'woke_its_name', label: 'Woke Its True Name', description: 'It told them what it is called. Now it obeys.', baseWeight: 3, rarity: 'legendary', removeTags: ['hook:blade_hungers'], grantTraits: ['blade_true_name'], weaponTierDelta: 2, epithet: { text: 'Master of the Whispering Blade', priority: 70 }, nextStepId: null, color: '#ffe08a', icon: 'Sparkles' },
+    { id: 'woke_its_name', label: 'Woke Its True Name', description: 'It told them what it is called. Now it obeys.', baseWeight: 3, rarity: 'legendary', removeTags: ['hook:blade_hungers'], grantTraits: ['blade_true_name'], weaponTierDelta: 2, upgrade: true, epithet: { text: 'Master of the Whispering Blade', priority: 70 }, nextStepId: null, color: '#ffe08a', icon: 'Sparkles' },
   ],
 };
 
@@ -875,11 +877,10 @@ const WHISPERING_BLADE: WheelStep = {
     {
       id: 'take_it',
       label: 'Take It',
-      description: 'A tier 6 blade with a will of its own, and a new way to win every fight. It will get thirsty.',
+      description: 'A power 6 blade with a will of its own, and a new way to win every fight. It will get thirsty.',
       baseWeight: 50,
       rarity: 'common',
-      gear: { weapon: 6 },
-      grantTraits: ['sentient_blade'],
+      gear: { weapon: { unique: 'whispering_blade' } },
       grantTags: ['hook:blade_hungers'],
       epithet: { text: 'Bearer of the Whispering Blade', priority: 64 },
       nextStepId: null,
@@ -890,13 +891,13 @@ const WHISPERING_BLADE: WheelStep = {
     {
       id: 'speak_its_name',
       label: 'Speak Its True Name',
-      description: 'It obeys whoever knows its name. A tier 7 blade that never gets thirsty.',
+      description: 'It obeys whoever knows its name. A blade that never gets thirsty, and obeys.',
       baseWeight: 10,
       rarity: 'legendary',
       condition: (_world, char) => hasTrait(char, 'true_name') || hasTrait(char, 'blade_true_name'),
       lockedReason: 'Only someone who knows a true name can command it',
-      gear: { weapon: 7 },
-      grantTraits: ['sentient_blade', 'blade_true_name'],
+      gear: { weapon: { unique: 'whispering_blade' } },
+      grantTraits: ['blade_true_name'],
       epithet: { text: 'Master of the Whispering Blade', priority: 70 },
       nextStepId: null,
       color: '#ffe08a',

@@ -20,7 +20,7 @@ One hero at a time, start to finish, in a world that remembers them. Odds are al
 
 ## Operating Context
 
-Played in a desktop browser, in sessions of a few minutes to an hour. Tabs: Create (roll a soul), Adventures (the hero's road), Chronicle (the world's record), and a dev-only Wheels inspector.
+Played in a browser on desktop and on phones (phones first-class since 2026-10-17: portrait and landscape, touch), in sessions of a few minutes to an hour. On a phone the hero rides in a bar along the bottom edge and opens as a sheet, so the wheel keeps the screen. Tabs: Create (roll a soul), Adventures (the hero's road), Chronicle (the world's record), and a dev-only Wheels inspector.
 
 ## Capabilities and Constraints
 

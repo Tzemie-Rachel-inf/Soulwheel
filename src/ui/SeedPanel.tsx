@@ -4,7 +4,7 @@
  * says so. Today's daily results sit underneath, ready to copy and compare.
  */
 import { useState, type FormEvent } from 'react';
-import { CalendarDays, Copy, Dices, Sprout } from 'lucide-react';
+import { CalendarDays, Copy, Dices, Sprout, Trash2 } from 'lucide-react';
 import type { Character } from '../engine/types';
 import type { SoulStart } from '../state/useCharacterGeneration';
 import { bestStat } from '../engine/lineage';
@@ -12,7 +12,7 @@ import { STAT_LABELS } from './format';
 import { dailySeed, dailyShareText, today, useProfile, type DailyResult } from '../state/profile';
 
 const chip =
-  'btn-plaque flex items-center gap-1.5 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50';
+  'btn-plaque flex items-center gap-1.5 px-3 py-1.5 text-sm pointer-coarse:min-h-11 disabled:cursor-not-allowed disabled:opacity-50';
 
 function prettyDate(date: string): string {
   const [y, m, d] = date.split('-').map(Number);
@@ -27,11 +27,14 @@ interface SeedPanelProps {
   /** Their parent, if they are an heir. */
   parent: Character | null;
   onRoll: (from: SoulStart | null) => void;
+  /** Throw this soul away mid-roll and start over. Absent when it can't be scrapped right now. */
+  onScrap?: () => void;
 }
 
-export function SeedPanel({ character, fresh, parent, onRoll }: SeedPanelProps) {
+export function SeedPanel({ character, fresh, parent, onRoll, onScrap }: SeedPanelProps) {
   const profile = useProfile();
   const [typed, setTyped] = useState('');
+  const [confirming, setConfirming] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const date = today();
   const results = profile.dailies.filter((d) => d.date === date).sort((a, b) => b.fame - a.fame || b.adventures - a.adventures);
@@ -97,7 +100,7 @@ export function SeedPanel({ character, fresh, parent, onRoll }: SeedPanelProps) 
               onChange={(e) => setTyped(e.currentTarget.value)}
               placeholder="or a seed someone shared"
               maxLength={60}
-              className="min-w-0 flex-1 border border-lead bg-nave px-2.5 py-1.5 text-sm text-vellum placeholder:text-ash/80 focus:border-gilt"
+              className="min-w-0 flex-1 border border-lead bg-nave px-2.5 py-1.5 text-sm text-vellum placeholder:text-ash/80 focus:border-gilt pointer-coarse:min-h-11 pointer-coarse:text-base"
             />
             <button type="submit" className={chip} disabled={!typed.trim()}>
               <Sprout aria-hidden="true" size={14} />
@@ -107,6 +110,35 @@ export function SeedPanel({ character, fresh, parent, onRoll }: SeedPanelProps) 
         </div>
       ) : (
         <p className="text-sm text-ash">Rolled by chance.</p>
+      )}
+
+      {!fresh && onScrap && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-lead pt-2">
+          {confirming ? (
+            <>
+              <p className="text-sm text-ember">Scrap this soul? Every wheel spun so far is lost.</p>
+              <button
+                type="button"
+                className={chip}
+                onClick={() => {
+                  setConfirming(false);
+                  onScrap();
+                }}
+              >
+                <Trash2 aria-hidden="true" size={14} />
+                Yes, scrap them
+              </button>
+              <button type="button" className={chip} onClick={() => setConfirming(false)} autoFocus>
+                Keep rolling
+              </button>
+            </>
+          ) : (
+            <button type="button" className={chip} onClick={() => setConfirming(true)}>
+              <Trash2 aria-hidden="true" size={14} />
+              Scrap this soul and start over
+            </button>
+          )}
+        </div>
       )}
 
       {results.length > 0 && (

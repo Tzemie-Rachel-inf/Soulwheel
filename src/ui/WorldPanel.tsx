@@ -66,11 +66,13 @@ export function WorldPanel({ world, config, inspectedId, onInspect, onThreatChan
         {roles.length === 0 ? (
           <p className="mt-1 text-sm text-vellum">Every one-of-a-kind role is open.</p>
         ) : (
-          <ul className="mt-2 grid gap-1.5">
+          <ul className="mt-2 grid grid-cols-[minmax(0,1fr)] gap-1.5">
             {roles.map(([key, holderId]) => (
               <li key={key} className="flex items-baseline justify-between gap-3">
-                <span className="text-vellum">{humanizeKey(key)}</span>
-                <span className="truncate text-sm text-ash">held by {nameOf(holderId)}</span>
+                <span className="shrink-0 text-vellum">{humanizeKey(key)}</span>
+                <span className="min-w-0 truncate text-sm text-ash" title={`held by ${nameOf(holderId)}`}>
+                  held by {nameOf(holderId)}
+                </span>
               </li>
             ))}
           </ul>
@@ -176,10 +178,16 @@ export function WorldPanel({ world, config, inspectedId, onInspect, onThreatChan
               setConfirmingReset(true);
             }
           }}
-          className="text-sm text-ash underline decoration-ash/40 underline-offset-4 hover:text-ember"
+          className={`-mx-2 min-h-11 px-2 text-sm underline underline-offset-4 ${
+            confirmingReset ? 'text-ember decoration-ember/60' : 'text-ash decoration-ash/40 hover:text-ember'
+          }`}
         >
           {confirmingReset ? 'Click again to erase this world' : 'Reset world'}
         </button>
+        {/* The button's words change in place; say it out loud too, with how long the offer stands. */}
+        <p role="status" className="sr-only">
+          {confirmingReset ? 'Reset armed. Press the button again within four seconds to erase this world and everyone in it.' : ''}
+        </p>
       </div>
     </section>
   );

@@ -1,0 +1,207 @@
+# Pages
+
+Single-page app; 'pages' are tabs in src/App.tsx. Engine/state/config imports omitted (logic only).
+
+## Create tab (rolling a soul) — the wheel + reveal
+Entry: src/App.tsx (CreateTab, lines ~425-525)
+Dependencies:
+- src/devtools/index.ts
+  - src/devtools/WheelInspector.tsx
+    - src/devtools/OptionTable.tsx
+      - src/devtools/lab.ts
+        - src/devtools/wheelCatalog.ts
+          - src/ui/format.ts
+      - src/devtools/wheelCatalog.ts (see above)
+      - src/ui/format.ts (see above)
+      - src/ui/rarity.ts
+      - src/ui/wheel/paintWheel.ts
+        - src/ui/rarity.ts (see above)
+        - src/ui/wheel/color.ts
+        - src/ui/wheel/wheelGeometry.ts
+    - src/devtools/WheelList.tsx
+      - src/devtools/wheelCatalog.ts (see above)
+      - src/ui/format.ts (see above)
+    - src/devtools/lab.ts (see above)
+    - src/devtools/wheelCatalog.ts (see above)
+    - src/ui/RollReveal.tsx
+      - src/ui/Stakes.tsx
+        - src/ui/icons.ts
+      - src/ui/format.ts (see above)
+      - src/ui/icons.ts (see above)
+      - src/ui/motion.ts
+      - src/ui/outcome.ts
+      - src/ui/rarity.ts (see above)
+      - src/ui/wheel/color.ts (see above)
+      - src/ui/wheel/paintWheel.ts (see above)
+    - src/ui/format.ts (see above)
+    - src/ui/wheel/SpinWheel.tsx
+      - src/ui/devPick.ts
+      - src/ui/format.ts (see above)
+      - src/ui/icons.ts (see above)
+      - src/ui/rarity.ts (see above)
+      - src/ui/settings.ts
+      - src/ui/sound.ts
+      - src/ui/wheel/LandingBurst.tsx
+        - src/ui/rarity.ts (see above)
+      - src/ui/wheel/color.ts (see above)
+      - src/ui/wheel/paintWheel.ts (see above)
+      - src/ui/wheel/upgradeEffects.ts
+        - src/ui/wheel/HammerUpgrade.tsx
+          - src/ui/wheel/upgradeEffects.ts (see above)
+      - src/ui/wheel/wheelGeometry.ts (see above)
+- src/ui/AdventureTab.tsx
+  - src/ui/FameMeter.tsx
+  - src/ui/GearCard.tsx
+    - src/ui/format.ts (see above)
+    - src/ui/rarity.ts (see above)
+  - src/ui/Headstone.tsx
+    - src/ui/legend.ts
+      - src/ui/format.ts (see above)
+  - src/ui/OddsList.tsx
+    - src/ui/format.ts (see above)
+    - src/ui/rarity.ts (see above)
+    - src/ui/wheel/paintWheel.ts (see above)
+  - src/ui/QuestPanel.tsx
+    - src/ui/format.ts (see above)
+    - src/ui/icons.ts (see above)
+    - src/ui/wheel/color.ts (see above)
+  - src/ui/RollReveal.tsx (see above)
+  - src/ui/Stakes.tsx (see above)
+  - src/ui/WheelTitle.tsx
+  - src/ui/battle/BattleHUD.tsx
+  - src/ui/battle/CritCascade.tsx
+    - src/ui/settings.ts (see above)
+  - src/ui/battle/SpellBar.tsx
+    - src/ui/icons.ts (see above)
+  - src/ui/format.ts (see above)
+  - src/ui/motion.ts (see above)
+  - src/ui/settings.ts (see above)
+  - src/ui/wheel/FateWheels.tsx
+    - src/ui/RollReveal.tsx (see above)
+    - src/ui/format.ts (see above)
+    - src/ui/rarity.ts (see above)
+    - src/ui/wheel/SpinWheel.tsx (see above)
+- src/ui/CharacterCard.tsx
+  - src/ui/CountUp.tsx
+  - src/ui/FameMeter.tsx (see above)
+  - src/ui/GearCard.tsx (see above)
+  - src/ui/Headstone.tsx (see above)
+  - src/ui/format.ts (see above)
+  - src/ui/rarity.ts (see above)
+  - src/ui/share.ts
+    - src/ui/format.ts (see above)
+    - src/ui/legend.ts (see above)
+- src/ui/ChronicleTab.tsx
+  - src/ui/FeatsPanel.tsx
+    - src/ui/icons.ts (see above)
+  - src/ui/HousesPanel.tsx
+    - src/ui/RollReveal.tsx (see above)
+    - src/ui/legend.ts (see above)
+- src/ui/FeatToasts.tsx
+  - src/ui/icons.ts (see above)
+  - src/ui/sound.ts (see above)
+- src/ui/HeroBar.tsx
+  - src/ui/CharacterCard.tsx (see above)
+  - src/ui/format.ts (see above)
+- src/ui/OddsList.tsx (see above)
+- src/ui/RollReveal.tsx (see above)
+- src/ui/SeedPanel.tsx
+  - src/ui/format.ts (see above)
+- src/ui/SettingsTab.tsx
+  - src/ui/settings.ts (see above)
+- src/ui/WheelTitle.tsx (see above)
+- src/ui/WorldPanel.tsx
+  - src/devtools/index.ts (see above)
+  - src/ui/Headstone.tsx (see above)
+  - src/ui/format.ts (see above)
+- src/ui/devPick.ts (see above)
+- src/ui/format.ts (see above)
+- src/ui/motion.ts (see above)
+- src/ui/rarity.ts (see above)
+- src/ui/sound.ts (see above)
+- src/ui/wheel/FateWheels.tsx (see above)
+- src/ui/wheel/color.ts (see above)
+- src/ui/wheel/paintWheel.ts (see above)
+
+## Adventures tab
+Entry: src/ui/AdventureTab.tsx
+Dependencies:
+- src/ui/FameMeter.tsx
+- src/ui/GearCard.tsx
+  - src/ui/format.ts
+  - src/ui/rarity.ts
+- src/ui/Headstone.tsx
+  - src/ui/legend.ts
+    - src/ui/format.ts (see above)
+- src/ui/OddsList.tsx
+  - src/ui/format.ts (see above)
+  - src/ui/rarity.ts (see above)
+  - src/ui/wheel/paintWheel.ts
+    - src/ui/rarity.ts (see above)
+    - src/ui/wheel/color.ts
+    - src/ui/wheel/wheelGeometry.ts
+- src/ui/QuestPanel.tsx
+  - src/ui/format.ts (see above)
+  - src/ui/icons.ts
+  - src/ui/wheel/color.ts (see above)
+- src/ui/RollReveal.tsx
+  - src/ui/Stakes.tsx
+    - src/ui/icons.ts (see above)
+  - src/ui/format.ts (see above)
+  - src/ui/icons.ts (see above)
+  - src/ui/motion.ts
+  - src/ui/outcome.ts
+  - src/ui/rarity.ts (see above)
+  - src/ui/wheel/color.ts (see above)
+  - src/ui/wheel/paintWheel.ts (see above)
+- src/ui/Stakes.tsx (see above)
+- src/ui/WheelTitle.tsx
+- src/ui/battle/BattleHUD.tsx
+- src/ui/battle/CritCascade.tsx
+  - src/ui/settings.ts
+- src/ui/battle/SpellBar.tsx
+  - src/ui/icons.ts (see above)
+- src/ui/format.ts (see above)
+- src/ui/motion.ts (see above)
+- src/ui/settings.ts (see above)
+- src/ui/wheel/FateWheels.tsx
+  - src/ui/RollReveal.tsx (see above)
+  - src/ui/format.ts (see above)
+  - src/ui/rarity.ts (see above)
+  - src/ui/wheel/SpinWheel.tsx
+    - src/ui/devPick.ts
+    - src/ui/format.ts (see above)
+    - src/ui/icons.ts (see above)
+    - src/ui/rarity.ts (see above)
+    - src/ui/settings.ts (see above)
+    - src/ui/sound.ts
+    - src/ui/wheel/LandingBurst.tsx
+      - src/ui/rarity.ts (see above)
+    - src/ui/wheel/color.ts (see above)
+    - src/ui/wheel/paintWheel.ts (see above)
+    - src/ui/wheel/upgradeEffects.ts
+      - src/ui/wheel/HammerUpgrade.tsx
+        - src/ui/wheel/upgradeEffects.ts (see above)
+    - src/ui/wheel/wheelGeometry.ts (see above)
+
+## Chronicle tab
+Entry: src/ui/ChronicleTab.tsx
+Dependencies:
+- src/ui/FeatsPanel.tsx
+  - src/ui/icons.ts
+- src/ui/HousesPanel.tsx
+  - src/ui/RollReveal.tsx
+    - src/ui/Stakes.tsx
+      - src/ui/icons.ts (see above)
+    - src/ui/format.ts
+    - src/ui/icons.ts (see above)
+    - src/ui/motion.ts
+    - src/ui/outcome.ts
+    - src/ui/rarity.ts
+    - src/ui/wheel/color.ts
+    - src/ui/wheel/paintWheel.ts
+      - src/ui/rarity.ts (see above)
+      - src/ui/wheel/color.ts (see above)
+      - src/ui/wheel/wheelGeometry.ts
+  - src/ui/legend.ts
+    - src/ui/format.ts (see above)

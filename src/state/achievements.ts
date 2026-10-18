@@ -6,6 +6,7 @@
  * Tests read only what characters already remember (their rolls, adventures, traits, fate),
  * so a world from before feats existed can still earn them the moment it loads.
  */
+import { weaponPower } from '../engine/gear';
 import { calculatePowerRating } from '../engine/power';
 import { fameStanding } from '../engine/fame';
 import { STAT_KEYS, type Character, type GameConfig, type World } from '../engine/types';
@@ -60,7 +61,7 @@ export const FEATS: Feat[] = [
   { id: 'divine_spark', name: 'Divine Spark', description: 'Roll a god.', icon: 'Sun', earnedBy: (x) => x.everyone.find((c) => c.history.some((r) => r.stepId === 'ancestry' && r.optionId === 'god')) ?? null },
   { id: 'transcendent', name: 'Less Something They Use', description: 'Master a power to Transcendent.', icon: 'WandSparkles', earnedBy: (x) => x.everyone.find((c) => c.traits.some((t) => t.rank === 'Transcendent')) ?? null },
   { id: 'past_the_ladder', name: 'Past the Ladder', description: 'Ascend a stat beyond 25.', icon: 'BicepsFlexed', earnedBy: (x) => x.everyone.find((c) => STAT_KEYS.some((k) => c.stats[k] > 25)) ?? null },
-  { id: 'arms_of_legend', name: 'Arms of Legend', description: 'Carry a weapon of tier 8 or higher.', icon: 'Sword', earnedBy: (x) => x.everyone.find((c) => c.weaponTier >= 8) ?? null },
+  { id: 'arms_of_legend', name: 'Arms of Legend', description: 'Carry a weapon of power 8 or higher.', icon: 'Sword', earnedBy: (x) => x.everyone.find((c) => weaponPower(c) >= 8) ?? null },
   { id: 'thousand_strong', name: 'A Thousand Strong', description: 'Reach 1,000 Combat Power.', icon: 'Zap', earnedBy: (x) => x.everyone.find((c) => calculatePowerRating(c) >= 1000) ?? null },
   { id: 'against_all_odds', name: 'Against All Odds', description: 'Land a slice with less than half a percent chance.', icon: 'Dices', earnedBy: (x) => x.everyone.find((c) => allRolls(c).some((r) => r.probability > 0 && r.probability < 0.005 && !r.chosen)) ?? null },
   { id: 'standing_on_graves', name: 'Standing on Graves', description: 'Meet someone from an earlier life on the road.', icon: 'Users', earnedBy: (x) => x.heroes.find((c) => c.adventures.some((a) => a.rolls.some((r) => r.cast))) ?? null },

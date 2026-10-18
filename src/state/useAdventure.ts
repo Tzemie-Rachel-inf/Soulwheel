@@ -6,16 +6,28 @@
  * A death is a death: walking away from the reveal can't undo it.
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { chooseAdventure, getAdventureStep, spinAdventure, startAdventure, type AdventureState } from '../engine/adventure';
+import { castInBattle, chooseAdventure, decideAdventure, getAdventureStep, spinAdventure, startAdventure, type AdventureState } from '../engine/adventure';
 import { EngineError } from '../engine/errors';
 import { getStep } from '../engine/generation';
 import { defaultRng, seededFrom, type Rng } from '../engine/rng';
-import type { Character, GameConfig, World } from '../engine/types';
+import type { Character, GameConfig, SpellMode, World } from '../engine/types';
 import type { SpinRequest } from '../ui/wheel/SpinWheel';
-import { advance, createFlowSession, settleSpin, startSpin, viewFlow, type SpinSession } from './generationSession';
+import { advance, createFlowSession, pickSpin, settleSpin, smashSpin, startSpin, viewFlow, type Side, type SpinSession } from './generationSession';
 import type { CommitResult } from './useWorld';
 
 export type AdventureSession = SpinSession<AdventureState>;
+
+/** Where the playtest switch between the two ways of casting spells is remembered, per browser. */
+const SPELL_MODE_KEY = 'chronicle.battleSpells';
+
+function loadSpellMode(fallback: SpellMode): SpellMode {
+  try {
+    const saved = localStorage.getItem(SPELL_MODE_KEY);
+    return saved === 'auto' || saved === 'choose' ? saved : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 export function useAdventure(config: GameConfig, world: World, finish: (state: AdventureState) => CommitResult) {
   const [session, setSession] = useState<AdventureSession | null>(null);
@@ -24,6 +36,8 @@ export function useAdventure(config: GameConfig, world: World, finish: (state: A
   const committed = useRef<AdventureState | null>(null);
   /** A seeded hero's adventure draws from its own stream (`seed:n`), so it can be replayed. */
   const rng = useRef<Rng>(defaultRng);
+  /** Boss battles: spells on the wheel, or cast by the player (a playtest switch; one is to be retired). */
+  const [spellMode, setSpellModeState] = useState<SpellMode>(() => loadSpellMode(config.adventure.battleSpells ?? 'auto'));
 
   // The wheel as the hero faces it: whoever this wheel has cast, and the outcomes only they bring.
   const state = session?.state;
@@ -44,19 +58,71 @@ export function useAdventure(config: GameConfig, world: World, finish: (state: A
     () => (phase === 'spinning' && pending ? { id: spinCount, targetIndex: pending.roll.winner.index } : null),
     [phase, spinCount, pending],
   );
+  /** A Wise hero's second wheel: the same spin, its own target. */
+  const right = session?.wise?.right;
+  const altSpinRequest = useMemo<SpinRequest | null>(
+    () => (phase === 'spinning' && right ? { id: spinCount, targetIndex: right.roll.winner.index } : null),
+    [phase, spinCount, right],
+  );
+
+  /**
+   * Write a final state to the world the moment it is decided (the last wheel lands, is smashed,
+   * or is kept): false if the world refused it. A repeated call can't write it twice.
+   */
+  const commitIfOver = useCallback(
+    (landed: AdventureState | undefined): boolean => {
+      if (!landed || landed.currentStepId !== null || committed.current === landed) return true;
+      committed.current = landed;
+      const result = finish(landed);
+      if (result.ok) return true;
+      setError(result.message);
+      setSession(null);
+      return false;
+    },
+    [finish],
+  );
 
   const embark = useCallback(
     (hero: Character) => {
       try {
         committed.current = null;
         rng.current = hero.seed ? seededFrom(`${hero.seed}:${hero.adventures.length}`) : defaultRng;
-        setSession(createFlowSession(startAdventure(config, hero)));
+        setSession(createFlowSession(startAdventure(config, hero, { spellMode })));
         setError(null);
       } catch (err) {
         setError(describe(err));
       }
     },
-    [config],
+    [config, spellMode],
+  );
+
+  /**
+   * Switch how battles cast spells. Takes effect at once between spins; a battle under way keeps
+   * the odds it was solved with, so the fairest test starts a fresh battle.
+   */
+  const setSpellMode = useCallback((mode: SpellMode) => {
+    setSpellModeState(mode);
+    try {
+      localStorage.setItem(SPELL_MODE_KEY, mode);
+    } catch {
+      // Private windows: the switch still works for this visit.
+    }
+    setSession((s) => (s && s.phase === 'ready' ? { ...s, state: { ...s.state, spellMode: mode } } : s));
+  }, []);
+
+  /** In a choose-mode battle: cast a spell before the spin. No wheel turns. */
+  const cast = useCallback(
+    (spellId: string) => {
+      if (!session || session.phase !== 'ready') return;
+      try {
+        const state = castInBattle(session.state, config, spellId, rng.current);
+        setError(null);
+        setSession((s) => (s && s.phase === 'ready' ? { ...s, state } : s));
+      } catch (err) {
+        setError(describe(err));
+      }
+    },
+    [session, config],
   );
 
   const spin = useCallback(() => {
@@ -96,19 +162,53 @@ export function useAdventure(config: GameConfig, world: World, finish: (state: A
 
   const settle = useCallback(
     (spinId: number) => {
-      const landed = session?.phase === 'spinning' && spinId === session.spinCount ? session.pending?.state : undefined;
-      if (landed && landed.currentStepId === null && committed.current !== landed) {
-        committed.current = landed;
-        const result = finish(landed);
-        if (!result.ok) {
-          setError(result.message);
-          setSession(null);
-          return;
-        }
-      }
+      // A Wise hero's spin is decided when they keep one, not when it lands.
+      const landed = session?.phase === 'spinning' && spinId === session.spinCount && !session.wise ? session.pending?.state : undefined;
+      if (!commitIfOver(landed)) return;
       setSession((s) => (s ? settleSpin(s, spinId) : s));
     },
-    [session, finish],
+    [session, commitIfOver],
+  );
+  const settleAlt = useCallback((spinId: number) => setSession((s) => (s ? settleSpin(s, spinId, 'right') : s)), []);
+
+  /** A Wise hero keeps one of their two rolls. */
+  const pick = useCallback(
+    (side: Side) => {
+      if (session?.phase !== 'picking' || !session.wise) return;
+      if (!commitIfOver(session.wise[side].state)) return;
+      setSession((s) => (s ? pickSpin(s, side) : s));
+    },
+    [session, commitIfOver],
+  );
+
+  /** An Ancient's decree: the wheel turns to the slice they named. */
+  const decree = useCallback(
+    (index: number) => {
+      if (!session || session.phase !== 'ready') return;
+      try {
+        const outcome = decideAdventure(session.state, config, world, index, 'decree', rng.current);
+        setError(null);
+        setSession((s) => (s ? startSpin(s, outcome) : s));
+      } catch (err) {
+        setError(describe(err));
+      }
+    },
+    [session, config, world],
+  );
+
+  /** A Brute's Smash: the wheel stopped dead on slice `index`, and that is the roll. */
+  const smash = useCallback(
+    (spinId: number, index: number) => {
+      if (!session || session.phase !== 'spinning' || spinId !== session.spinCount) return;
+      try {
+        const outcome = decideAdventure(session.state, config, world, index, 'smash', rng.current);
+        if (!commitIfOver(outcome.state)) return;
+        setSession((s) => (s ? smashSpin(s, spinId, outcome) : s));
+      } catch (err) {
+        setError(describe(err));
+      }
+    },
+    [session, config, world, commitIfOver],
   );
 
   const next = useCallback(() => setSession((s) => (s ? advance(s) : s)), []);
@@ -119,7 +219,7 @@ export function useAdventure(config: GameConfig, world: World, finish: (state: A
     setError(null);
   }, []);
 
-  return { session, view, spinRequest, error, embark, spin, choose, settle, next, leave };
+  return { session, view, spinRequest, altSpinRequest, error, embark, spin, decree, smash, choose, settle, settleAlt, pick, next, leave, cast, spellMode, setSpellMode };
 }
 
 function describe(err: unknown): string {
